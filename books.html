@@ -14,13 +14,25 @@
     /* 隱藏捲軸但保留滾動功能 */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* 雲端更新提示紅點動畫 */
+    @keyframes pulse-red {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .update-dot {
+      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
+      position: absolute; top: -2px; right: -2px;
+      animation: pulse-red 2s infinite;
+    }
   </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
   <!-- ================= 密碼鎖畫面 ================= -->
   <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
-    <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
+    <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-sm text-center transform transition-transform">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
         <i class="fas fa-lock text-2xl"></i>
       </div>
@@ -42,10 +54,13 @@
     <!-- 頂部 Header：加入雲端連線狀態按鈕 -->
     <header class="bg-white px-4 pt-10 pb-3 shadow-sm z-10 flex justify-between items-center shrink-0 h-16">
       <div class="text-base font-bold text-gray-800 tracking-wide">極簡記帳</div>
-      <button id="btn-cloud-sync" onclick="connectDrive()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold shadow-sm transition-all active:scale-95 border border-gray-200">
-        <i id="cloud-icon" class="fas fa-cloud"></i>
-        <span id="cloud-sync-text">未連線</span>
-      </button>
+      <div class="relative">
+        <button id="btn-cloud-sync" onclick="handleCloudButtonClick()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold shadow-sm transition-all active:scale-95 border border-gray-200">
+          <i id="cloud-icon" class="fas fa-cloud"></i>
+          <span id="cloud-sync-text">未連線</span>
+        </button>
+        <div id="cloud-update-dot" class="update-dot hidden"></div>
+      </div>
     </header>
 
     <!-- 提示訊息 (Toast) -->
@@ -146,7 +161,8 @@
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div class="p-4 border-b border-gray-50">
             <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
-            <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時可點擊「雲端同步」來更新本地資料。</p>
+            <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測雲端是否有新資料。</p>
+            <p id="sync-status-label" class="text-[10px] text-gray-400 mt-1 italic">尚未連線同步</p>
           </div>
           <div class="p-4 space-y-3">
             
@@ -218,6 +234,7 @@
     const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
     let tokenClient;
     const SYNC_FILE_NAME = '極簡記帳備份_AutoSync.json';
+    let backgroundCheckInterval = null;
 
     const CATEGORIES = [
       { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B' },
@@ -232,6 +249,7 @@
     let records = [];
     let selectedCategoryId = 'food';
     let currentTab = 'add';
+    let cloudHasUpdate = false;
 
     function checkPassword() {
       const input = document.getElementById('lock-password').value;
@@ -283,8 +301,9 @@
             localStorage.setItem('gdrive_token_expiry', Date.now() + 3500 * 1000);
             updateSyncUI(true);
             showToast('✅ 雲端連線成功！');
-            // 連線成功後，立即嘗試同步(下載)雲端資料
+            // 連線成功後立即下載
             syncFromDrive(tokenResponse.access_token);
+            startBackgroundCheck();
           }
         }
       });
@@ -295,23 +314,50 @@
       const expiry = localStorage.getItem('gdrive_token_expiry');
       if (token && expiry && Date.now() < parseInt(expiry)) {
         updateSyncUI(true);
+        startBackgroundCheck();
       } else {
         updateSyncUI(false);
       }
+    }
+
+    function startBackgroundCheck() {
+      if (backgroundCheckInterval) clearInterval(backgroundCheckInterval);
+      // 每 60 秒檢查一次雲端檔案更新時間
+      backgroundCheckInterval = setInterval(() => {
+        const token = localStorage.getItem('gdrive_token');
+        if (token) checkCloudUpdate(token);
+      }, 60000);
     }
 
     function updateSyncUI(isConnected) {
       const btn = document.getElementById('btn-cloud-sync');
       const icon = document.getElementById('cloud-icon');
       const text = document.getElementById('cloud-sync-text');
+      const label = document.getElementById('sync-status-label');
+      
       if (isConnected) {
         btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all";
         icon.className = "fas fa-cloud-check";
         text.innerText = "已連線";
+        const lastSync = localStorage.getItem('last_sync_time');
+        if (lastSync) label.innerText = `最後同步：${lastSync}`;
       } else {
         btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200 text-xs font-bold shadow-sm transition-all active:scale-95";
         icon.className = "fas fa-cloud";
         text.innerText = "未連線";
+        label.innerText = `尚未連線同步`;
+      }
+    }
+
+    function handleCloudButtonClick() {
+      const token = localStorage.getItem('gdrive_token');
+      if (token && cloudHasUpdate) {
+        // 如果偵測到有更新，主動詢問
+        syncFromDriveManual();
+      } else if (!token) {
+        connectDrive();
+      } else {
+        showToast('目前與雲端資料一致');
       }
     }
 
@@ -323,102 +369,120 @@
       if (tokenClient) tokenClient.requestAccessToken();
     }
 
-    // --- 新增：跨瀏覽器下載同步邏輯 ---
+    // --- 背景檢查雲端是否有更新 ---
+    async function checkCloudUpdate(accessToken) {
+      try {
+        const fileId = localStorage.getItem('drive_file_id');
+        if (!fileId) return;
+
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const cloudModified = new Date(data.modifiedTime).getTime();
+        const localSyncTimestamp = parseInt(localStorage.getItem('last_sync_timestamp') || '0');
+
+        // 如果雲端時間大於本地同步時間 5 秒以上 (容錯)
+        if (cloudModified > localSyncTimestamp + 5000) {
+          cloudHasUpdate = true;
+          document.getElementById('cloud-update-dot').classList.remove('hidden');
+        } else {
+          cloudHasUpdate = false;
+          document.getElementById('cloud-update-dot').classList.add('hidden');
+        }
+      } catch (e) { console.error("背景檢查失敗", e); }
+    }
+
     async function syncFromDriveManual() {
       const token = localStorage.getItem('gdrive_token');
-      if (!token) {
-        showToast('請先連線雲端');
-        return;
-      }
-      showToast('⏳ 正在從雲端抓取資料...');
+      if (!token) { showToast('請先連線雲端'); return; }
+      showToast('⏳ 正在同步雲端資料...');
       await syncFromDrive(token);
     }
 
     async function syncFromDrive(accessToken) {
       try {
-        // 1. 先搜尋雲端是否有同名檔案
-        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'&fields=files(id,name)`, {
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'&fields=files(id,name,modifiedTime)`, {
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
         const searchData = await searchRes.json();
         
         if (searchData.files && searchData.files.length > 0) {
-          const fileId = searchData.files[0].id;
-          localStorage.setItem('drive_file_id', fileId);
+          const file = searchData.files[0];
+          localStorage.setItem('drive_file_id', file.id);
 
-          // 2. 下載內容
-          const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+          const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
             headers: { 'Authorization': `Bearer ${accessToken}` }
           });
           const cloudRecords = await contentRes.json();
 
-          // 3. 判斷是否需要更新本地
-          // 如果本地沒資料，或雲端紀錄比較多，則直接更新 (這裡做簡易判斷)
-          if (records.length === 0 || confirm('偵測到雲端已有備份資料，是否下載並覆蓋本地紀錄？')) {
+          if (records.length === 0 || confirm('偵測到雲端有較新資料，是否下載並覆蓋本地紀錄？')) {
             records = cloudRecords;
             localStorage.setItem('my_expenses', JSON.stringify(records));
+            
+            // 記錄同步時間戳記與可讀時間
+            const now = new Date();
+            localStorage.setItem('last_sync_timestamp', now.getTime());
+            localStorage.setItem('last_sync_time', now.toLocaleTimeString());
+            
+            cloudHasUpdate = false;
+            document.getElementById('cloud-update-dot').classList.add('hidden');
+            
             initDateFilters();
             if(currentTab === 'stats') updateStatsView();
+            updateSyncUI(true);
             showToast('✅ 雲端資料同步完成');
           }
-        } else {
-          console.log("雲端尚未有備份檔案");
         }
-      } catch (e) {
-        console.error("同步失敗", e);
-      }
+      } catch (e) { console.error("同步失敗", e); }
     }
 
     async function executeDriveUpload(isAuto = true) {
       const accessToken = localStorage.getItem('gdrive_token');
       if (!accessToken) {
-         if (!isAuto) showToast('請先點擊上方按鈕連線雲端');
+         if (!isAuto) showToast('請先連線雲端');
          return;
       }
-      if (!isAuto) showToast('⏳ 正在同步至 Google Drive...');
+      if (!isAuto) showToast('⏳ 正在同步至雲端...');
       const fileContent = JSON.stringify(records);
       const fileId = localStorage.getItem('drive_file_id');
 
       try {
+        let response;
         if (fileId) {
-           const response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+           response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
              method: 'PATCH',
              headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
              body: fileContent
            });
-           if (response.ok) {
-             if (!isAuto) showToast('✅ 雲端同步成功！');
-             return;
-           }
-           if (response.status === 401 || response.status === 403) {
-             localStorage.removeItem('gdrive_token');
-             updateSyncUI(false);
-             if (!isAuto) showToast('❌ 雲端授權過期，請重新連線');
-             return;
-           }
+        } else {
+          const metadata = { name: SYNC_FILE_NAME, mimeType: 'application/json' };
+          const form = new FormData();
+          form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+          form.append('file', new Blob([fileContent], { type: 'application/json' }));
+          response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+            body: form
+          });
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('drive_file_id', data.id);
+          }
         }
-
-        const metadata = { name: SYNC_FILE_NAME, mimeType: 'application/json' };
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([fileContent], { type: 'application/json' }));
-
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${accessToken}` },
-          body: form
-        });
 
         if (response.ok) {
-          const data = await response.json();
-          localStorage.setItem('drive_file_id', data.id);
-          if (!isAuto) showToast('✅ 成功建立雲端備份！');
-        } else {
-          if (!isAuto) showToast('❌ 上傳失敗');
+          const now = new Date();
+          localStorage.setItem('last_sync_timestamp', now.getTime());
+          localStorage.setItem('last_sync_time', now.toLocaleTimeString());
+          updateSyncUI(true);
+          if (!isAuto) showToast('✅ 雲端同步成功！');
+        } else if (response.status === 401) {
+          localStorage.removeItem('gdrive_token');
+          updateSyncUI(false);
         }
-      } catch (e) {
-         if (!isAuto) showToast('❌ 網路錯誤，無法同步');
-      }
+      } catch (e) { if (!isAuto) showToast('❌ 網路錯誤'); }
     }
 
     function initDateFilters(isFirstLoad = false) {
@@ -471,15 +535,15 @@
       });
       document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
       if(tab === 'stats') updateStatsView();
+      // 切換分頁時順便檢查一次更新
+      const token = localStorage.getItem('gdrive_token');
+      if (token) checkCloudUpdate(token);
     }
 
     function addRecord() {
       const amountInput = document.getElementById('input-amount');
       const amount = Number(amountInput.value);
-      if(!amount || amount <= 0) {
-        showToast('請輸入有效的金額！');
-        return;
-      }
+      if(!amount || amount <= 0) { showToast('請輸入有效的金額！'); return; }
       const newRecord = { id: Date.now().toString(), amount: amount, cat: selectedCategoryId, date: document.getElementById('input-date').value, note: document.getElementById('input-note').value.trim() };
       records.push(newRecord);
       records.sort((a, b) => new Date(b.date) - new Date(a.date));
