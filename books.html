@@ -161,13 +161,13 @@
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div class="p-4 border-b border-gray-50">
             <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
-            <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測雲端是否有新資料。</p>
+            <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測並「合併」本地與雲端的紀錄。</p>
             <p id="sync-status-label" class="text-[10px] text-gray-400 mt-1 italic">尚未連線同步</p>
           </div>
           <div class="p-4 space-y-3">
             
             <button onclick="syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
-              <i class="fas fa-sync mr-2"></i> 從雲端同步(下載)最新資料
+              <i class="fas fa-sync mr-2"></i> 從雲端下載並合併資料
             </button>
 
             <button onclick="executeDriveUpload(false)" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
@@ -289,6 +289,19 @@
       selectCategory('food');
       initDateFilters(true);
       checkTokenStatus();
+
+      // 監聽網頁可見性與焦點，減少不必要的 API 請求
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          checkTokenStatus(); // 回到網頁時檢查一次
+        } else {
+          stopBackgroundCheck(); // 離開網頁時停止背景定時器
+        }
+      });
+      window.addEventListener('focus', () => {
+        const token = localStorage.getItem('gdrive_token');
+        if (token) checkCloudUpdate(token);
+      });
     }
 
     function initGoogleClient() {
@@ -301,7 +314,6 @@
             localStorage.setItem('gdrive_token_expiry', Date.now() + 3500 * 1000);
             updateSyncUI(true);
             showToast('✅ 雲端連線成功！');
-            // 連線成功後立即下載
             syncFromDrive(tokenResponse.access_token);
             startBackgroundCheck();
           }
@@ -317,16 +329,26 @@
         startBackgroundCheck();
       } else {
         updateSyncUI(false);
+        stopBackgroundCheck();
       }
     }
 
     function startBackgroundCheck() {
-      if (backgroundCheckInterval) clearInterval(backgroundCheckInterval);
-      // 每 60 秒檢查一次雲端檔案更新時間
-      backgroundCheckInterval = setInterval(() => {
-        const token = localStorage.getItem('gdrive_token');
-        if (token) checkCloudUpdate(token);
-      }, 60000);
+      stopBackgroundCheck();
+      // 只有在網頁可見時才啟動定時器
+      if (document.visibilityState === 'visible') {
+        backgroundCheckInterval = setInterval(() => {
+          const token = localStorage.getItem('gdrive_token');
+          if (token) checkCloudUpdate(token);
+        }, 60000);
+      }
+    }
+
+    function stopBackgroundCheck() {
+      if (backgroundCheckInterval) {
+        clearInterval(backgroundCheckInterval);
+        backgroundCheckInterval = null;
+      }
     }
 
     function updateSyncUI(isConnected) {
@@ -352,7 +374,6 @@
     function handleCloudButtonClick() {
       const token = localStorage.getItem('gdrive_token');
       if (token && cloudHasUpdate) {
-        // 如果偵測到有更新，主動詢問
         syncFromDriveManual();
       } else if (!token) {
         connectDrive();
@@ -369,7 +390,6 @@
       if (tokenClient) tokenClient.requestAccessToken();
     }
 
-    // --- 背景檢查雲端是否有更新 ---
     async function checkCloudUpdate(accessToken) {
       try {
         const fileId = localStorage.getItem('drive_file_id');
@@ -383,7 +403,6 @@
         const cloudModified = new Date(data.modifiedTime).getTime();
         const localSyncTimestamp = parseInt(localStorage.getItem('last_sync_timestamp') || '0');
 
-        // 如果雲端時間大於本地同步時間 5 秒以上 (容錯)
         if (cloudModified > localSyncTimestamp + 5000) {
           cloudHasUpdate = true;
           document.getElementById('cloud-update-dot').classList.remove('hidden');
@@ -401,6 +420,7 @@
       await syncFromDrive(token);
     }
 
+    // --- 修改：比對合併邏輯 ---
     async function syncFromDrive(accessToken) {
       try {
         const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'&fields=files(id,name,modifiedTime)`, {
@@ -417,11 +437,22 @@
           });
           const cloudRecords = await contentRes.json();
 
-          if (records.length === 0 || confirm('偵測到雲端有較新資料，是否下載並覆蓋本地紀錄？')) {
-            records = cloudRecords;
+          // 開始合併邏輯
+          const localIds = new Set(records.map(r => r.id));
+          const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
+          
+          const cloudIds = new Set(cloudRecords.map(r => r.id));
+          const newFromLocal = records.filter(r => !cloudIds.has(r.id));
+
+          // 只要其中一邊有新東西，就進行合併
+          if (newFromCloud.length > 0 || newFromLocal.length > 0) {
+            // 合併兩邊不重複的紀錄
+            const mergedRecords = [...records, ...newFromCloud];
+            mergedRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            records = mergedRecords;
             localStorage.setItem('my_expenses', JSON.stringify(records));
             
-            // 記錄同步時間戳記與可讀時間
             const now = new Date();
             localStorage.setItem('last_sync_timestamp', now.getTime());
             localStorage.setItem('last_sync_time', now.toLocaleTimeString());
@@ -432,7 +463,21 @@
             initDateFilters();
             if(currentTab === 'stats') updateStatsView();
             updateSyncUI(true);
-            showToast('✅ 雲端資料同步完成');
+
+            // 如果本地端有新資料，合併後主動同步回雲端，確保雲端也是完整的
+            if (newFromLocal.length > 0) {
+                showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料，並同步本地新資料`);
+                executeDriveUpload(true); 
+            } else {
+                showToast(`✅ 已從雲端同步合併 ${newFromCloud.length} 筆新資料`);
+            }
+          } else {
+             // 兩邊資料完全一致，僅更新同步時間
+             const now = new Date();
+             localStorage.setItem('last_sync_timestamp', now.getTime());
+             localStorage.setItem('last_sync_time', now.toLocaleTimeString());
+             updateSyncUI(true);
+             showToast('目前資料已是最新狀態');
           }
         }
       } catch (e) { console.error("同步失敗", e); }
@@ -535,7 +580,6 @@
       });
       document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
       if(tab === 'stats') updateStatsView();
-      // 切換分頁時順便檢查一次更新
       const token = localStorage.getItem('gdrive_token');
       if (token) checkCloudUpdate(token);
     }
@@ -635,11 +679,11 @@
            const cat = CATEGORIES.find(c => c.id === r.cat) || CATEGORIES[6];
            return `
              <div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-gray-50">
-               <div class="flex items-center space-x-3">
-                 <div class="w-8 h-8 rounded-full flex items-center justify-center" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
+               <div class="flex items-center space-x-4">
+                 <div class="p-3 rounded-full" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
                  <div><div class="font-bold text-gray-800 text-sm">${cat.name}</div><div class="text-[10px] text-gray-500">${r.date} ${r.note ? `• ${r.note}` : ''}</div></div>
                </div>
-               <div class="flex items-center space-x-2"><span class="font-bold text-gray-800 text-sm">$${r.amount.toLocaleString()}</span><button onclick="deleteRecord('${r.id}')" class="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><i class="fas fa-trash-alt"></i></button></div>
+               <div class="flex items-center space-x-3"><span class="font-bold text-gray-800 text-sm">$${r.amount.toLocaleString()}</span><button onclick="deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors"><i class="fas fa-trash-alt"></i></button></div>
              </div>
            `;
          }).join('');
