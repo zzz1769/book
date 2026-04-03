@@ -16,7 +16,25 @@
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden">
+<body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
+
+  <!-- ================= 密碼鎖畫面 ================= -->
+  <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
+    <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
+      <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <i class="fas fa-lock text-2xl"></i>
+      </div>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">需要解鎖</h2>
+      <p class="text-sm text-gray-500 mb-6">請輸入密碼以存取您的記帳資料</p>
+      
+      <input type="password" id="lock-password" inputmode="numeric" pattern="[0-9]*" class="w-full text-center text-3xl tracking-[0.5em] p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors mb-2" placeholder="••••">
+      <p id="lock-error" class="text-red-500 text-sm mb-4 h-5 opacity-0 transition-opacity">密碼錯誤，請重試</p>
+      
+      <button onclick="checkPassword()" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
+        解鎖進入
+      </button>
+    </div>
+  </div>
 
   <!-- 模擬手機外框 -->
   <div class="w-full max-w-[400px] h-full md:h-[800px] bg-gray-50 md:rounded-[3rem] md:shadow-2xl relative overflow-hidden flex flex-col md:border-[8px] border-gray-900">
@@ -179,6 +197,20 @@
   <!-- JavaScript 邏輯區 -->
   <script>
     // ==========================================
+    // 🔒 密碼鎖設定 (已使用單向雜湊演算法加密)
+    // ==========================================
+    // 這裡儲存的是密碼轉換後的「特徵碼」，原始密碼已經完全不存在於檔案中
+    const TARGET_HASH = 1625059299;
+
+    // 單向雜湊函數 (One-way Hash)
+    function generateHash(str) {
+      return str.split('').reduce((a, b) => {
+        a = ((a << 5) - a) + b.charCodeAt(0);
+        return a & a;
+      }, 0);
+    }
+
+    // ==========================================
     // ⚠️ Google Drive API 設置區塊
     // ==========================================
     const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
@@ -198,8 +230,46 @@
     let selectedCategoryId = 'food';
     let currentTab = 'add';
 
+    // --- 密碼鎖邏輯 ---
+    function checkPassword() {
+      const input = document.getElementById('lock-password').value;
+      const errorMsg = document.getElementById('lock-error');
+      
+      // 將使用者的輸入轉換為雜湊值，再與目標雜湊值比對
+      if (generateHash(input) === TARGET_HASH) {
+        // 密碼正確，存入 sessionStorage (關閉分頁就會失效需重登)
+        sessionStorage.setItem('app_unlocked', 'true');
+        
+        // 隱藏密碼鎖畫面
+        const lockScreen = document.getElementById('lock-screen');
+        lockScreen.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => {
+          lockScreen.style.display = 'none';
+        }, 300);
+      } else {
+        // 密碼錯誤，顯示錯誤訊息並清空輸入框
+        errorMsg.classList.remove('opacity-0');
+        document.getElementById('lock-password').value = '';
+        setTimeout(() => {
+          errorMsg.classList.add('opacity-0');
+        }, 2000);
+      }
+    }
+
+    // 支援按 Enter 鍵解鎖
+    document.getElementById('lock-password').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') {
+        checkPassword();
+      }
+    });
+
     // 初始化載入
     function init() {
+      // 檢查是否已解鎖
+      if (sessionStorage.getItem('app_unlocked') === 'true') {
+        document.getElementById('lock-screen').style.display = 'none';
+      }
+
       const saved = localStorage.getItem('my_expenses');
       if(saved) records = JSON.parse(saved);
 
