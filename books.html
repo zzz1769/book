@@ -127,6 +127,17 @@
           </select>
         </div>
 
+        <!-- 搜尋與清除篩選列 -->
+        <div class="flex space-x-2">
+          <div class="relative flex-1">
+            <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
+            <input type="text" id="input-search" placeholder="搜尋備註與分類..." oninput="handleSearch()" class="w-full pl-9 p-2.5 text-sm font-medium bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors shadow-sm">
+          </div>
+          <button id="btn-clear-filter" onclick="clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm whitespace-nowrap active:scale-95">
+            清除篩選
+          </button>
+        </div>
+
         <!-- 總結卡片 -->
         <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md">
           <h3 id="stats-title-text" class="text-blue-100 text-xs font-medium mb-1">本月總支出</h3>
@@ -135,22 +146,23 @@
 
         <!-- 圓餅圖與明細 -->
         <div id="stats-card" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
-          <h3 class="w-full text-left text-sm font-bold text-gray-800 mb-2">支出結構</h3>
+          <h3 class="w-full text-left text-sm font-bold text-gray-800 mb-2">支出結構 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊圖表可篩選)</span></h3>
           <div class="relative flex items-center justify-center h-32 w-32">
-            <canvas id="pieChart" width="128" height="128" class="transform -rotate-90"></canvas>
+            <!-- 移除 CSS rotate，改由 JS 控制繪製角度，以精準捕捉點擊事件 -->
+            <canvas id="pieChart" width="128" height="128" class="cursor-pointer transition-transform hover:scale-105"></canvas>
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                <span class="text-gray-400 text-[10px]">Total</span>
             </div>
           </div>
-          <div id="stats-breakdown" class="w-full mt-4 space-y-2">
+          <div id="stats-breakdown" class="w-full mt-4 space-y-1">
              <!-- JS 動態生成分類明細 -->
           </div>
         </div>
 
         <!-- 歷史紀錄 -->
         <div>
-          <h3 class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄</h3>
-          <div id="history-list" class="space-y-2">
+          <h3 id="history-list-title" class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄</h3>
+          <div id="history-list" class="space-y-2 pb-4">
              <!-- JS 動態生成紀錄列表 -->
           </div>
         </div>
@@ -269,6 +281,11 @@
     let currentTab = 'add';
     let cloudHasUpdate = false;
 
+    // --- 搜尋與篩選狀態 ---
+    let currentSearchQuery = '';
+    let currentCategoryFilter = null;
+    let pieChartSlices = []; // 儲存圓餅圖的繪製角度用於點擊偵測
+
     function checkPassword() {
       const input = document.getElementById('lock-password').value;
       const errorMsg = document.getElementById('lock-error');
@@ -319,6 +336,46 @@
       window.addEventListener('focus', () => {
         const token = localStorage.getItem('gdrive_token');
         if (token) checkCloudUpdate(token);
+      });
+
+      // 初始化圓餅圖點擊偵測事件
+      initCanvasClickListener();
+    }
+
+    function initCanvasClickListener() {
+      const canvas = document.getElementById('pieChart');
+      canvas.addEventListener('click', function(e) {
+        if (pieChartSlices.length === 0) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        // 將滑鼠座標對應至 Canvas 實際解析度
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const dx = x - cx;
+        const dy = y - cy;
+        
+        // 檢查是否點擊在圓餅圖的有效半徑內 (外圈以內，內圈空洞以外)
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const radius = Math.min(cx, cy);
+        if (distance > radius || distance < radius * 0.6) return;
+
+        // 計算點擊的角度 (-PI 到 PI)
+        let angle = Math.atan2(dy, dx);
+        // 因為繪製是從 -0.5*PI 開始，我們將角度基準調整一致，方便判斷
+        if (angle < -0.5 * Math.PI) {
+            angle += 2 * Math.PI;
+        }
+
+        // 尋找點擊在哪一個切片區間內
+        const clickedSlice = pieChartSlices.find(s => angle >= s.startAngle && angle <= s.endAngle);
+        if (clickedSlice) {
+            filterByCategory(clickedSlice.id);
+        }
       });
     }
 
@@ -601,6 +658,28 @@
       if (token) checkCloudUpdate(token);
     }
 
+    // --- 搜尋與篩選邏輯 ---
+    function handleSearch() {
+      currentSearchQuery = document.getElementById('input-search').value.toLowerCase();
+      updateStatsView();
+    }
+
+    function clearCategoryFilter() {
+      currentCategoryFilter = null;
+      document.getElementById('btn-clear-filter').classList.add('hidden');
+      updateStatsView();
+    }
+
+    function filterByCategory(catId) {
+      if (currentCategoryFilter === catId) {
+         clearCategoryFilter(); // 點擊同一個分類則取消篩選
+      } else {
+         currentCategoryFilter = catId;
+         document.getElementById('btn-clear-filter').classList.remove('hidden');
+         updateStatsView();
+      }
+    }
+
     function addRecord() {
       const amountInput = document.getElementById('input-amount');
       const amount = Number(amountInput.value);
@@ -644,50 +723,87 @@
       const selectedYear = document.getElementById('filter-year').value;
       const selectedMonth = document.getElementById('filter-month').value;
       const monthSelect = document.getElementById('filter-month');
+      
       if (selectedYear === 'all') {
           monthSelect.value = 'all'; monthSelect.disabled = true; monthSelect.classList.add('opacity-50', 'bg-gray-100');
       } else {
           monthSelect.disabled = false; monthSelect.classList.remove('opacity-50', 'bg-gray-100');
       }
+      
       let filteredRecords = records;
       let titleText = '累積總支出';
+      
+      // 1. 日期篩選
       if (selectedYear !== 'all') {
           if (selectedMonth !== 'all') {
               const prefix = `${selectedYear}-${selectedMonth}`;
-              filteredRecords = records.filter(r => r.date.startsWith(prefix));
+              filteredRecords = filteredRecords.filter(r => r.date.startsWith(prefix));
               titleText = `${selectedYear}年 ${parseInt(selectedMonth)}月 總支出`;
           } else {
-              filteredRecords = records.filter(r => r.date.startsWith(selectedYear));
+              filteredRecords = filteredRecords.filter(r => r.date.startsWith(selectedYear));
               titleText = `${selectedYear}年 總支出`;
           }
       }
+
+      // 2. 文字搜尋篩選 (套用於圖表與列表)
+      if (currentSearchQuery) {
+          filteredRecords = filteredRecords.filter(r => {
+             const catName = CATEGORIES.find(c => c.id === r.cat)?.name || '';
+             const noteText = r.note ? r.note.toLowerCase() : '';
+             return noteText.includes(currentSearchQuery) || catName.includes(currentSearchQuery);
+          });
+      }
+
       document.getElementById('stats-title-text').innerText = titleText;
       let total = 0; let totalsByCat = {};
       filteredRecords.forEach(r => { total += r.amount; totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; });
       document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
+      
       const canvas = document.getElementById('pieChart');
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = Math.min(cx, cy);
+      
+      pieChartSlices = []; // 重置切片陣列
+      
       if(total === 0) {
         ctx.fillStyle = '#f3f4f6'; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
         document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
       } else {
-        let startAngle = 0; let breakdownArr = [];
+        // 由正上方 (-90度) 開始繪製
+        let startAngle = -0.5 * Math.PI; 
+        let breakdownArr = [];
+        
         CATEGORIES.forEach(cat => {
           if(totalsByCat[cat.id]) {
-             const amount = totalsByCat[cat.id]; const sliceAngle = (amount / total) * 2 * Math.PI;
-             ctx.fillStyle = cat.color; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, startAngle + sliceAngle); ctx.closePath(); ctx.fill(); startAngle += sliceAngle;
-             const percent = ((amount / total) * 100).toFixed(1); breakdownArr.push({ ...cat, amount, percent });
+             const amount = totalsByCat[cat.id]; 
+             const sliceAngle = (amount / total) * 2 * Math.PI;
+             const endAngle = startAngle + sliceAngle;
+             
+             ctx.fillStyle = cat.color; 
+             ctx.beginPath(); 
+             ctx.moveTo(cx, cy); 
+             ctx.arc(cx, cy, radius, startAngle, endAngle); 
+             ctx.closePath(); 
+             ctx.fill(); 
+             
+             // 紀錄角度以供點擊偵測
+             pieChartSlices.push({ id: cat.id, startAngle, endAngle });
+             startAngle = endAngle;
+             
+             const percent = ((amount / total) * 100).toFixed(1); 
+             breakdownArr.push({ ...cat, amount, percent });
           }
         });
         ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
         breakdownArr.sort((a,b) => b.amount - a.amount);
+        
+        // 生成分類明細 (加入點擊篩選事件與視覺回饋)
         document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `
-          <div class="flex items-center justify-between">
+          <div onclick="filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}">
              <div class="flex items-center">
-               <div class="w-2 h-2 rounded-full mr-2" style="background-color: ${item.color}"></div>
-               <span class="text-xs text-gray-700">${item.name}</span>
+               <div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div>
+               <span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span>
              </div>
              <div class="flex items-center space-x-2">
                <span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span>
@@ -696,9 +812,27 @@
           </div>
         `).join('');
       }
+
+      // 3. 分類點擊篩選 (僅套用於下方的歷史清單)
+      let listRecords = filteredRecords;
+      if (currentCategoryFilter) {
+          listRecords = listRecords.filter(r => r.cat === currentCategoryFilter);
+      }
+
+      // 更新清單標題
+      const listTitle = document.getElementById('history-list-title');
+      if (currentSearchQuery || currentCategoryFilter) {
+          let catName = currentCategoryFilter ? CATEGORIES.find(c => c.id === currentCategoryFilter).name : '';
+          listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${catName}</span>`;
+      } else {
+          listTitle.innerText = '區間紀錄';
+      }
+
       const historyContainer = document.getElementById('history-list');
-      if(filteredRecords.length === 0) { historyContainer.innerHTML = '<div class="text-center py-6 text-gray-400 text-sm">此區間尚未有記帳紀錄</div>'; } else {
-         historyContainer.innerHTML = filteredRecords.map(r => {
+      if(listRecords.length === 0) { 
+         historyContainer.innerHTML = '<div class="text-center py-6 text-gray-400 text-sm">此區間/條件下尚未有記帳紀錄</div>'; 
+      } else {
+         historyContainer.innerHTML = listRecords.map(r => {
            const cat = CATEGORIES.find(c => c.id === r.cat) || CATEGORIES[6];
            return `
              <div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-gray-50">
