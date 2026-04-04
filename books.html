@@ -8,8 +8,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- 引入 FontAwesome 圖示 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- 引入 Google Identity Services 進行 OAuth 認證 -->
-  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleClient()"></script>
   <style>
     /* 隱藏捲軸但保留滾動功能 */
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -1126,7 +1124,10 @@
         initDateFilters(); showToast('已清空所有資料'); executeDriveUpload(true);
       }
     }
+    
     window.onload = init;
   </script>
+  <!-- 將外部 API 載入移到底部，確保 initGoogleClient 已建立 -->
+  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleClient()"></script>
 </body>
 </html>
