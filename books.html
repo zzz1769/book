@@ -941,11 +941,11 @@
     // ==========================================
     function autoCategorize(shopName) {
       const name = shopName.toLowerCase();
-      if(name.match(/統一超商|全家|萊爾富|ＯＫ|麥當勞|肯德基|摩斯|星巴克|八方雲集|便當|麵|飲料|茶|餐廳|咖啡|食堂|烘焙|好市多|和德昌|三商|餐飲|購好康|爭鮮|壽司|飲店|牛乳大王|食品|家福/)) return 'food';
-      if(name.match(/全聯|大潤發|家樂福|愛買|寶雅|屈臣氏|康是美|五金|水電|瓦斯|電信|台電|水費|特力屋|土地開發基金|小米|富邦|宜家家居|自來水|金興發/)) return 'housing';
+      if(name.match(/統一超商|全家|萊爾富|ＯＫ|麥當勞|肯德基|摩斯|星巴克|八方雲集|便當|麵|飲料|茶|餐廳|咖啡|食堂|烘焙|好市多|和德昌|三商|餐飲|購好康|爭鮮|壽司|飲店|牛乳大王|食品|家福|統一|鼎城小吃/)) return 'food';
+      if(name.match(/全聯|大潤發|家樂福|愛買|寶雅|屈臣氏|康是美|五金|水電|瓦斯|電信|電力|水費|特力屋|土地開發基金|小米|富邦媒體|宜家家居|自來水|金興發/)) return 'housing';
       if(name.match(/中油|台塑|加油|停車|台鐵|高鐵|捷運|客運|計程車|uber|機車|汽車/)) return 'transport';
-      if(name.match(/uniqlo|net|服飾|鞋|包|百貨/)) return 'clothes';
-      if(name.match(/威秀|國賓|影城|電影|ktv|遊戲|app store|google play|蝦皮|健身/)) return 'entertainment';
+      if(name.match(/uniqlo|net|服飾|鞋|包|百貨|年青人眼鏡/)) return 'clothes';
+      if(name.match(/威秀|國賓|影城|電影|ktv|遊戲|app store|google play|蝦皮|健身|台灣迪卡儂/)) return 'entertainment';
       if(name.match(/書局|博客來|誠品|補習|文具/)) return 'education';
       return 'other'; 
     }
