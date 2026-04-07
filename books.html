@@ -201,10 +201,15 @@
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div class="p-4 border-b border-gray-50">
-            <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
-            <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測並「合併」本地與雲端的紀錄。</p>
-            <p id="sync-status-label" class="text-[10px] text-gray-400 mt-1 italic">尚未連線同步</p>
+          <div class="p-4 border-b border-gray-50 flex justify-between items-start">
+            <div>
+              <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
+              <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測並「合併」本地與雲端的紀錄。</p>
+              <p id="sync-status-label" class="text-[10px] text-gray-400 mt-1 italic">尚未連線同步</p>
+            </div>
+            <button onclick="connectDrive()" class="ml-2 shrink-0 px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm">
+              切換帳號
+            </button>
           </div>
           <div class="p-4 space-y-3">
             
@@ -320,6 +325,12 @@
     function init() {
       if (sessionStorage.getItem('app_unlocked') === 'true') {
         document.getElementById('lock-screen').style.display = 'none';
+      } else {
+        // 自動聚焦密碼輸入框
+        setTimeout(() => {
+          const lockInput = document.getElementById('lock-password');
+          if (lockInput) lockInput.focus();
+        }, 100);
       }
       const saved = localStorage.getItem('my_expenses');
       if(saved) records = JSON.parse(saved);
@@ -399,6 +410,7 @@
           if (tokenResponse && tokenResponse.access_token) {
             localStorage.setItem('gdrive_token', tokenResponse.access_token);
             localStorage.setItem('gdrive_token_expiry', Date.now() + 3500 * 1000);
+            localStorage.setItem('gdrive_was_connected', 'true'); // 紀錄曾經連線過
             updateSyncUI(true);
             showToast('✅ 雲端連線成功！');
             syncFromDrive(tokenResponse.access_token);
@@ -406,17 +418,30 @@
           }
         }
       });
+      // 初始化後立即檢查是否需要靜默自動連線
+      checkTokenStatus();
     }
 
     function checkTokenStatus() {
       const token = localStorage.getItem('gdrive_token');
       const expiry = localStorage.getItem('gdrive_token_expiry');
+      const wasConnected = localStorage.getItem('gdrive_was_connected') === 'true';
+
       if (token && expiry && Date.now() < parseInt(expiry)) {
         updateSyncUI(true);
         startBackgroundCheck();
       } else {
         updateSyncUI(false);
         stopBackgroundCheck();
+        
+        // 如果曾經連線過但 Token 遺失或過期，嘗試靜默重新連線
+        if (wasConnected && tokenClient) {
+          try {
+            tokenClient.requestAccessToken({ prompt: 'none' });
+          } catch (e) {
+            console.log('自動連線失敗，需要使用者手動點擊');
+          }
+        }
       }
     }
 
@@ -474,7 +499,10 @@
         alert('請先在程式碼設定 GOOGLE_CLIENT_ID');
         return;
       }
-      if (tokenClient) tokenClient.requestAccessToken();
+      if (tokenClient) {
+        // 加入 prompt: 'select_account'，確保點擊連線時能夠切換 Google 帳號
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+      }
     }
 
     async function checkCloudUpdate(accessToken) {
