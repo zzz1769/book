@@ -43,13 +43,14 @@
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
   <!-- ================= 密碼鎖畫面 ================= -->
-  <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
-    <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
+  <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300 cursor-pointer" onclick="focusLockInput()">
+    <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform" onclick="event.stopPropagation();">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
         <i class="fas fa-lock text-2xl"></i>
       </div>
       <h2 class="text-xl font-bold text-gray-800 mb-2">需要解鎖</h2>
-      <p class="text-sm text-gray-500 mb-6">請輸入密碼以存取您的記帳資料</p>
+      <p class="text-sm text-gray-500 mb-2">請輸入密碼以存取您的記帳資料</p>
+      <p class="text-xs text-blue-500 mb-6 font-medium">(若手機鍵盤未彈出，請點擊輸入框)</p>
       
       <input type="password" id="lock-password" inputmode="numeric" pattern="[0-9]*" class="w-full text-center text-3xl tracking-[0.5em] p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors mb-2" placeholder="••••">
       <p id="lock-error" class="text-red-500 text-sm mb-4 h-5 opacity-0 transition-opacity">密碼錯誤，請重試</p>
@@ -275,6 +276,12 @@
       }, 0);
     }
 
+    // 解決手機端無法自動 focus 的問題（需使用者點擊觸發）
+    function focusLockInput() {
+      const lockInput = document.getElementById('lock-password');
+      if (lockInput) lockInput.focus();
+    }
+
     // ==========================================
     // ⚠️ Google Drive API 設置區塊
     // ==========================================
@@ -326,11 +333,8 @@
       if (sessionStorage.getItem('app_unlocked') === 'true') {
         document.getElementById('lock-screen').style.display = 'none';
       } else {
-        // 自動聚焦密碼輸入框
-        setTimeout(() => {
-          const lockInput = document.getElementById('lock-password');
-          if (lockInput) lockInput.focus();
-        }, 100);
+        // 電腦端嘗試自動 focus
+        setTimeout(() => { focusLockInput(); }, 100);
       }
       const saved = localStorage.getItem('my_expenses');
       if(saved) records = JSON.parse(saved);
@@ -415,6 +419,8 @@
             showToast('✅ 雲端連線成功！');
             syncFromDrive(tokenResponse.access_token);
             startBackgroundCheck();
+          } else if (tokenResponse && tokenResponse.error) {
+            console.log('背景自動連線無法完成，需要手動點擊', tokenResponse.error);
           }
         }
       });
@@ -434,12 +440,12 @@
         updateSyncUI(false);
         stopBackgroundCheck();
         
-        // 如果曾經連線過但 Token 遺失或過期，嘗試靜默重新連線
+        // 恢復自動連線：若曾經連線過，嘗試在背景靜默取得 Token
         if (wasConnected && tokenClient) {
           try {
             tokenClient.requestAccessToken({ prompt: 'none' });
           } catch (e) {
-            console.log('自動連線失敗，需要使用者手動點擊');
+            console.log('自動連線失敗，請手動點擊連線', e);
           }
         }
       }
@@ -485,10 +491,13 @@
 
     function handleCloudButtonClick() {
       const token = localStorage.getItem('gdrive_token');
-      if (token && cloudHasUpdate) {
+      // Token 是否仍然有效
+      const isTokenValid = token && localStorage.getItem('gdrive_token_expiry') && Date.now() < parseInt(localStorage.getItem('gdrive_token_expiry'));
+
+      if (isTokenValid && cloudHasUpdate) {
         syncFromDriveManual();
-      } else if (!token) {
-        connectDrive();
+      } else if (!isTokenValid) {
+        connectDrive(); // 如果無 Token 或已過期，重新連線
       } else {
         showToast('目前與雲端資料一致');
       }
@@ -499,9 +508,24 @@
         alert('請先在程式碼設定 GOOGLE_CLIENT_ID');
         return;
       }
+
+      if (typeof google === 'undefined' || !google.accounts) {
+        showToast('Google 服務尚未載入或被阻擋，請稍後再試');
+        return;
+      }
+
+      if (!tokenClient) {
+        initGoogleClient();
+      }
+
       if (tokenClient) {
-        // 加入 prompt: 'select_account'，確保點擊連線時能夠切換 Google 帳號
-        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        try {
+          // 強制使用者選取帳號，確保手動操作不會被瀏覽器彈出視窗阻擋
+          tokenClient.requestAccessToken({ prompt: 'select_account' });
+        } catch (error) {
+          console.error("喚起登入視窗失敗:", error);
+          showToast('無法喚起登入視窗，請檢查瀏覽器設定');
+        }
       }
     }
 
