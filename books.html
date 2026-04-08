@@ -17,27 +17,20 @@
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
-  <!-- 認證登入/註冊畫面 -->
+  <!-- 認證登入/註冊畫面 (改為 Google 登入) -->
   <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-        <i class="fas fa-user-circle text-3xl"></i>
+        <i class="fab fa-google text-3xl"></i>
       </div>
-      <h2 id="auth-title" class="text-xl font-bold text-gray-800 mb-2">歡迎回來</h2>
-      <p class="text-sm text-gray-500 mb-6">請登入您的帳號以同步資料</p>
+      <h2 id="auth-title" class="text-xl font-bold text-gray-800 mb-2">歡迎來到極簡記帳</h2>
+      <p class="text-sm text-gray-500 mb-8">請使用 Google 帳號登入以同步您的雲端資料</p>
       
-      <div class="space-y-3 mb-2">
-        <input type="email" id="auth-email" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors text-sm" placeholder="電子信箱">
-        <input type="password" id="auth-password" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors text-sm" placeholder="密碼 (至少6碼)">
-      </div>
       <p id="auth-error" class="text-red-500 text-xs mb-4 h-4 opacity-0 transition-opacity">錯誤訊息</p>
       
-      <button id="auth-submit-btn" onclick="submitAuth()" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98] mb-4">
-        登入
-      </button>
-      
-      <button id="auth-toggle-btn" onclick="toggleAuthMode()" class="text-xs text-blue-500 hover:text-blue-700 font-medium transition-colors">
-        尚未擁有帳號？點此註冊
+      <button id="auth-submit-btn" onclick="signInWithGoogle()" class="w-full flex items-center justify-center py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-sm transition-all active:scale-[0.98] mb-4">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5 mr-3" alt="Google">
+        使用 Google 帳號登入
       </button>
     </div>
   </div>
@@ -196,7 +189,7 @@
   <!-- 使用 Type="module" 引入 Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // ==========================================
@@ -221,6 +214,7 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'my-expense-app';
+    const googleProvider = new GoogleAuthProvider();
     
     let currentUser = null;
     let unsubscribeFirestore = null;
@@ -243,41 +237,19 @@
     let pieChartSlices = [];
 
     // ==========================================
-    // 🔒 認證與登入邏輯
+    // 🔒 認證與登入邏輯 (Google 登入)
     // ==========================================
-    let isLoginMode = true;
     
-    window.toggleAuthMode = () => {
-       isLoginMode = !isLoginMode;
-       document.getElementById('auth-title').innerText = isLoginMode ? '歡迎回來' : '建立新帳號';
-       document.getElementById('auth-submit-btn').innerText = isLoginMode ? '登入' : '註冊';
-       document.getElementById('auth-toggle-btn').innerText = isLoginMode ? '尚未擁有帳號？點此註冊' : '已有帳號？點此登入';
-       document.getElementById('auth-error').classList.add('opacity-0');
-    };
-
-    window.submitAuth = async () => {
-       const email = document.getElementById('auth-email').value;
-       const password = document.getElementById('auth-password').value;
+    window.signInWithGoogle = async () => {
        const errorEl = document.getElementById('auth-error');
-
-       if(!email || !password) {
-           errorEl.innerText = '請輸入信箱與密碼';
-           errorEl.classList.remove('opacity-0');
-           return;
-       }
-
+       errorEl.classList.add('opacity-0');
+       
        try {
-           if (isLoginMode) {
-               await signInWithEmailAndPassword(auth, email, password);
-           } else {
-               await createUserWithEmailAndPassword(auth, email, password);
-           }
+           await signInWithPopup(auth, googleProvider);
+           // 成功後 onAuthStateChanged 會自動處理 UI 變化
        } catch (error) {
            console.error(error);
-           if (error.code === 'auth/email-already-in-use') errorEl.innerText = '此信箱已註冊';
-           else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') errorEl.innerText = '帳號或密碼錯誤';
-           else if (error.code === 'auth/weak-password') errorEl.innerText = '密碼長度需至少6個字元';
-           else errorEl.innerText = '發生錯誤，請檢查帳號密碼';
+           errorEl.innerText = '登入失敗，請稍後再試。';
            errorEl.classList.remove('opacity-0');
        }
     };
@@ -290,7 +262,6 @@
     // 初始化 Auth
     const initAuth = async () => {
       try {
-        // 在這套全新架構下，如果沒有預先登入的 token，畫面會自動停留載登入頁面等待使用者輸入
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         }
