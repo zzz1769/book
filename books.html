@@ -216,7 +216,6 @@
     // ==========================================
     // 🔥 Firebase 設定與初始化
     // ==========================================
-    // 【修改重點】未來您申請好 Firebase 後，請把這段換成您的設定檔
     let firebaseConfig;
     if (typeof __firebase_config !== 'undefined') {
       firebaseConfig = JSON.parse(__firebase_config); // Canvas 預覽環境自動配置
@@ -520,6 +519,7 @@
     const SYNC_FILE_NAME = '極簡記帳備份_AutoSync.json';
 
     window.initGoogleClient = () => {
+      if (typeof google === 'undefined' || !google.accounts) return;
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'https://www.googleapis.com/auth/drive.file',
@@ -532,6 +532,14 @@
         }
       });
     };
+
+    // 解決 Module 載入順序與外部腳本不同步的問題
+    const checkGoogleLoaded = setInterval(() => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        window.initGoogleClient();
+        clearInterval(checkGoogleLoaded);
+      }
+    }, 300);
 
     window.executeDriveUpload = () => {
       if (!tokenClient) { showToast("正在載入服務，請稍後"); return; }
@@ -549,11 +557,12 @@
       showToast('⏳ 正在上傳至 Google Drive...');
       const fileContent = JSON.stringify(records);
       let fileId = localStorage.getItem('drive_file_id');
+      const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
       
       try {
         if (!fileId) {
-          // 搜尋檔案是否存在
-          const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+          // 搜尋檔案是否存在 (修正搜尋網址編碼問題)
+          const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
           const searchData = await searchRes.json();
           if (searchData.files && searchData.files.length > 0) fileId = searchData.files[0].id;
         }
@@ -577,8 +586,9 @@
 
     async function performDriveDownload(accessToken) {
       showToast('⏳ 正在從 Google Drive 讀取...');
+      const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
       try {
-        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
         const searchData = await searchRes.json();
         
         if (searchData.files && searchData.files.length > 0) {
@@ -607,6 +617,7 @@
 
     initUI();
   </script>
-  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleClient()"></script>
+  <!-- 移除原先寫在這邊有機會提早觸發失效的 onload 事件 -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>
