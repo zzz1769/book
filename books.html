@@ -4,45 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>極簡記帳</title>
-  <!-- 引入 Tailwind CSS 進行排版 -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 引入 FontAwesome 圖示 -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* 隱藏捲軸但保留滾動功能 */
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    
-    /* 雲端更新提示紅點動畫 */
-    @keyframes pulse-red {
-      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
-      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-    }
-    .update-dot {
-      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
-      position: absolute; top: -2px; right: -2px;
-      animation: pulse-red 2s infinite;
-    }
-    
-    /* 讓原生 date input 隱藏日曆小圖示，外觀更乾淨 */
     input[type="date"]::-webkit-calendar-picker-indicator {
-      background: transparent;
-      bottom: 0;
-      color: transparent;
-      cursor: pointer;
-      height: auto;
-      left: 0;
-      position: absolute;
-      right: 0;
-      top: 0;
-      width: auto;
+      background: transparent; bottom: 0; color: transparent; cursor: pointer;
+      height: auto; left: 0; position: absolute; right: 0; top: 0; width: auto;
     }
   </style>
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
-  <!-- ================= 密碼鎖畫面 ================= -->
+  <!-- 密碼鎖畫面 -->
   <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300 cursor-pointer" onclick="focusLockInput()">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform" onclick="event.stopPropagation();">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -61,51 +36,38 @@
     </div>
   </div>
 
-  <!-- 模擬手機外框 -->
   <div class="w-full max-w-[400px] h-full md:h-[800px] bg-gray-50 md:rounded-[3rem] md:shadow-2xl relative overflow-hidden flex flex-col md:border-[8px] border-gray-900">
     
-    <!-- 頂部 Header：加入雲端連線狀態按鈕 -->
+    <!-- 頂部 Header -->
     <header class="bg-white px-4 pt-10 pb-3 shadow-sm z-10 flex justify-between items-center shrink-0 h-16">
       <div class="text-base font-bold text-gray-800 tracking-wide">極簡記帳</div>
-      <div class="relative">
-        <button id="btn-cloud-sync" onclick="handleCloudButtonClick()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold shadow-sm transition-all active:scale-95 border border-gray-200">
-          <i id="cloud-icon" class="fas fa-cloud"></i>
-          <span id="cloud-sync-text">未連線</span>
-        </button>
-        <div id="cloud-update-dot" class="update-dot hidden"></div>
+      <!-- 狀態列改為顯示 Firebase 狀態 -->
+      <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold shadow-sm" id="firebase-status">
+        <i class="fas fa-spinner fa-spin"></i>
+        <span>連線中...</span>
       </div>
     </header>
 
-    <!-- 提示訊息 (Toast) -->
     <div id="toast" class="absolute top-20 left-1/2 transform -translate-x-1/2 z-50 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm flex items-center opacity-0 pointer-events-none transition-opacity duration-300">
       <i class="fas fa-check-circle text-green-400 mr-2"></i>
       <span id="toast-msg">操作成功</span>
     </div>
 
-    <!-- 主要內容區：設定為可滾動區域 -->
     <main class="flex-1 overflow-y-auto no-scrollbar relative flex flex-col">
       
-      <!-- ================= 視圖 1: 新增記帳 ================= -->
+      <!-- 視圖 1: 新增記帳 -->
       <div id="view-add" class="p-3 space-y-3 flex-1 flex flex-col justify-center">
-        <!-- 金額輸入 -->
         <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
           <label class="block text-xs font-medium text-gray-500 mb-1">消費金額</label>
           <div class="flex items-center text-2xl font-bold text-gray-800">
             <span class="mr-2 text-gray-400">$</span>
-            <!-- 喚起手機純數字鍵盤 -->
             <input type="number" id="input-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0" class="w-full bg-transparent border-none outline-none focus:ring-0 p-0">
           </div>
         </div>
-
-        <!-- 分類選擇 -->
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-2">選擇分類</label>
-          <div id="category-container" class="grid grid-cols-4 gap-2">
-            <!-- JS 動態生成按鈕 -->
-          </div>
+          <div id="category-container" class="grid grid-cols-4 gap-2"></div>
         </div>
-
-        <!-- 日期與備註 -->
         <div class="space-y-2">
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
@@ -116,22 +78,16 @@
             <input type="text" id="input-note" placeholder="例如：晚餐、捷運..." class="w-full p-2 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors">
           </div>
         </div>
-
-        <!-- 儲存按鈕 -->
         <button onclick="addRecord()" class="w-full mt-2 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md shadow-blue-200 transition-all active:scale-[0.98]">
           儲存紀錄
         </button>
       </div>
 
-      <!-- ================= 視圖 2: 統計分析 ================= -->
+      <!-- 視圖 2: 統計分析 -->
       <div id="view-stats" class="p-3 space-y-3 hidden">
-        
-        <!-- 年份與月份下拉選擇器 -->
         <div class="flex space-x-2">
-          <select id="filter-year" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center">
-            <!-- JS 動態生成年份選項 -->
-          </select>
-          <select id="filter-month" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center">
+          <select id="filter-year" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm appearance-none text-center"></select>
+          <select id="filter-month" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm appearance-none text-center">
             <option value="all">全年</option>
             <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
             <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
@@ -139,102 +95,70 @@
             <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
           </select>
         </div>
-
-        <!-- 搜尋與清除篩選列 -->
         <div class="flex space-x-2">
           <div class="relative flex-1">
             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
-            <input type="text" id="input-search" placeholder="搜尋備註與分類..." oninput="handleSearch()" class="w-full pl-9 p-2.5 text-sm font-medium bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors shadow-sm">
+            <input type="text" id="input-search" placeholder="搜尋備註與分類..." oninput="handleSearch()" class="w-full pl-9 p-2.5 text-sm font-medium bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 shadow-sm">
           </div>
-          <button id="btn-clear-filter" onclick="clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm whitespace-nowrap active:scale-95">
+          <button id="btn-clear-filter" onclick="clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 shadow-sm whitespace-nowrap active:scale-95">
             清除篩選
           </button>
         </div>
 
-        <!-- 總結卡片 -->
         <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md">
           <h3 id="stats-title-text" class="text-blue-100 text-xs font-medium mb-1">本月總支出</h3>
           <div id="total-expense" class="text-3xl font-bold tracking-tight">$0</div>
         </div>
 
-        <!-- 圓餅圖與明細 -->
         <div id="stats-card" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
-          <h3 class="w-full text-left text-sm font-bold text-gray-800 mb-2">支出結構 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊圖表可篩選)</span></h3>
+          <h3 class="w-full text-left text-sm font-bold text-gray-800 mb-2">支出結構</h3>
           <div class="relative flex items-center justify-center h-32 w-32">
-            <!-- 移除 CSS rotate，改由 JS 控制繪製角度，以精準捕捉點擊事件 -->
             <canvas id="pieChart" width="128" height="128" class="cursor-pointer transition-transform hover:scale-105"></canvas>
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                <span class="text-gray-400 text-[10px]">Total</span>
             </div>
           </div>
-          <div id="stats-breakdown" class="w-full mt-4 space-y-1">
-             <!-- JS 動態生成分類明細 -->
-          </div>
+          <div id="stats-breakdown" class="w-full mt-4 space-y-1"></div>
         </div>
 
-        <!-- 歷史紀錄 -->
         <div>
-          <h3 id="history-list-title" class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊文字可直接修改)</span></h3>
-          <div id="history-list" class="space-y-2 pb-4">
-             <!-- JS 動態生成紀錄列表 -->
-          </div>
+          <h3 id="history-list-title" class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄</h3>
+          <div id="history-list" class="space-y-2 pb-4"></div>
         </div>
       </div>
 
-      <!-- ================= 視圖 3: 設定與備份 ================= -->
+      <!-- 視圖 3: 設定與備份 -->
       <div id="view-settings" class="p-3 space-y-3 hidden">
         
-        <!-- 新增：雲端發票匯入區塊 -->
+        <!-- Firebase 狀態區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-          <div class="p-4 border-b border-gray-50">
-            <h2 class="text-lg font-bold text-gray-800">雲端發票整合</h2>
-            <p class="text-xs text-gray-500 mt-1">請至財政部電子發票平台下載「發票明細表(CSV)」並在此匯入，系統會自動歸類與過濾重複資料。</p>
-          </div>
-          <div class="p-4">
-            <div class="relative">
-              <!-- 限制只能選擇 csv 檔案 -->
-              <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-              <button class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-bold shadow-sm pointer-events-none">
-                <i class="fas fa-file-invoice mr-2"></i> 匯入財政部發票 CSV
-              </button>
+          <div class="p-4 border-b border-gray-50 flex justify-between items-center">
+            <div>
+              <h2 class="text-lg font-bold text-gray-800">資料庫連線 (Firebase)</h2>
+              <p class="text-xs text-gray-500 mt-1">即時同步中，變更會自動儲存至雲端。</p>
             </div>
+            <i class="fas fa-database text-blue-500 text-xl"></i>
           </div>
         </div>
 
+        <!-- Google Drive 備份區塊 (手動) -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div class="p-4 border-b border-gray-50 flex justify-between items-start">
             <div>
-              <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
-              <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測並「合併」本地與雲端的紀錄。</p>
-              <p id="sync-status-label" class="text-[10px] text-gray-400 mt-1 italic">尚未連線同步</p>
+              <h2 class="text-lg font-bold text-gray-800">Google Drive 手動備份</h2>
+              <p class="text-xs text-gray-500 mt-1">您可以隨時將所有紀錄打包備份到雲端硬碟。</p>
             </div>
-            <button onclick="connectDrive()" class="ml-2 shrink-0 px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm">
-              切換帳號
-            </button>
           </div>
           <div class="p-4 space-y-3">
-            
+            <button onclick="executeDriveUpload()" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
+              <i class="fab fa-google-drive mr-2"></i> 備份資料至 Google Drive
+            </button>
             <button onclick="syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
-              <i class="fas fa-sync mr-2"></i> 從雲端下載並合併資料
+              <i class="fas fa-cloud-download-alt mr-2"></i> 從 Drive 還原資料
             </button>
-
-            <button onclick="executeDriveUpload(false)" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
-              <i class="fab fa-google-drive mr-2"></i> 手動強制同步(上傳)至雲端
-            </button>
-
-            <!-- 傳統下載選項作為備案 -->
-            <button onclick="exportData()" class="w-full flex items-center justify-center py-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium">
-              <i class="fas fa-download mr-2"></i> 直接下載備份檔 (JSON)
-            </button>
-
-            <div class="relative">
-              <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-              <button class="w-full flex items-center justify-center py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-medium border border-gray-200 pointer-events-none">
-                <i class="fas fa-upload mr-2"></i> 從 JSON 檔案還原
-              </button>
-            </div>
           </div>
         </div>
+
         <div class="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden mt-4">
            <div class="p-4">
              <button onclick="clearAllData()" class="w-full flex items-center justify-center py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium">
@@ -251,66 +175,30 @@
       <button onclick="switchTab('stats')" id="nav-stats" class="flex flex-col items-center space-y-1 text-gray-400 transition-colors">
         <i class="fas fa-chart-pie text-xl"></i><span class="text-[10px] font-medium">統計</span>
       </button>
-
       <button onclick="switchTab('add')" id="nav-add" class="flex flex-col items-center space-y-1 text-blue-600 transition-colors">
         <i class="fas fa-plus-circle text-2xl"></i><span class="text-[10px] font-medium">記帳</span>
       </button>
-
       <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center space-y-1 text-gray-400 transition-colors">
         <i class="fas fa-cog text-xl"></i><span class="text-[10px] font-medium">設定</span>
       </button>
     </nav>
   </div>
 
-  <!-- JavaScript 邏輯區 -->
-  <script>
+  <!-- 使用 Type="module" 引入 Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
     // ==========================================
-    // 🔒 密碼鎖設定 (已使用單向雜湊演算法加密)
+    // 🔒 密碼鎖設定
     // ==========================================
     const TARGET_HASH = 1625059299;
-
     function generateHash(str) {
-      return str.split('').reduce((a, b) => {
-        a = ((a << 5) - a) + b.charCodeAt(0);
-        return a & a;
-      }, 0);
+      return str.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
     }
-
-    // 解決手機端無法自動 focus 的問題（需使用者點擊觸發）
-    function focusLockInput() {
-      const lockInput = document.getElementById('lock-password');
-      if (lockInput) lockInput.focus();
-    }
-
-    // ==========================================
-    // ⚠️ Google Drive API 設置區塊
-    // ==========================================
-    const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
-    let tokenClient;
-    const SYNC_FILE_NAME = '極簡記帳備份_AutoSync.json';
-    let backgroundCheckInterval = null;
-
-    const CATEGORIES = [
-      { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B' },
-      { id: 'clothes', name: '服飾', icon: 'fas fa-tshirt', color: '#EC4899' },
-      { id: 'housing', name: '居住', icon: 'fas fa-home', color: '#8B5CF6' },
-      { id: 'transport', name: '交通', icon: 'fas fa-car', color: '#3B82F6' },
-      { id: 'education', name: '學習', icon: 'fas fa-book', color: '#10B981' },
-      { id: 'entertainment', name: '娛樂', icon: 'fas fa-gamepad', color: '#EF4444' },
-      { id: 'other', name: '其他', icon: 'fas fa-ellipsis-h', color: '#6B7280' }
-    ];
-
-    let records = [];
-    let selectedCategoryId = 'food';
-    let currentTab = 'add';
-    let cloudHasUpdate = false;
-
-    // --- 搜尋與篩選狀態 ---
-    let currentSearchQuery = '';
-    let currentCategoryFilter = null;
-    let pieChartSlices = []; // 儲存圓餅圖的繪製角度用於點擊偵測
-
-    function checkPassword() {
+    window.focusLockInput = () => { const lockInput = document.getElementById('lock-password'); if (lockInput) lockInput.focus(); };
+    window.checkPassword = () => {
       const input = document.getElementById('lock-password').value;
       const errorMsg = document.getElementById('lock-error');
       if (generateHash(input) === TARGET_HASH) {
@@ -323,489 +211,181 @@
         document.getElementById('lock-password').value = '';
         setTimeout(() => { errorMsg.classList.add('opacity-0'); }, 2000);
       }
+    };
+
+    // ==========================================
+    // 🔥 Firebase 設定與初始化
+    // ==========================================
+    // 【修改重點】未來您申請好 Firebase 後，請把這段換成您的設定檔
+    let firebaseConfig;
+    if (typeof __firebase_config !== 'undefined') {
+      firebaseConfig = JSON.parse(__firebase_config); // Canvas 預覽環境自動配置
+    } else {
+      // 請將您的設定貼在下方
+      firebaseConfig = {
+          apiKey: "AIzaSyDl3IYAAQGCwKLaSVGdY4ewZZlhVmu7dUg",
+          authDomain: "book-dad94.firebaseapp.com",
+          projectId: "book-dad94",
+          storageBucket: "book-dad94.firebasestorage.app",
+          messagingSenderId: "9435949525",
+          appId: "1:9435949525:web:979b0a1afea30e40fcb55c"
+      };
     }
 
-    document.getElementById('lock-password').addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') checkPassword();
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'my-expense-app';
+    
+    let currentUser = null;
+    let unsubscribeFirestore = null;
+
+    // 基礎參數
+    let records = [];
+    const CATEGORIES = [
+      { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B' },
+      { id: 'clothes', name: '服飾', icon: 'fas fa-tshirt', color: '#EC4899' },
+      { id: 'housing', name: '居住', icon: 'fas fa-home', color: '#8B5CF6' },
+      { id: 'transport', name: '交通', icon: 'fas fa-car', color: '#3B82F6' },
+      { id: 'education', name: '學習', icon: 'fas fa-book', color: '#10B981' },
+      { id: 'entertainment', name: '娛樂', icon: 'fas fa-gamepad', color: '#EF4444' },
+      { id: 'other', name: '其他', icon: 'fas fa-ellipsis-h', color: '#6B7280' }
+    ];
+    let selectedCategoryId = 'food';
+    let currentTab = 'add';
+    let currentSearchQuery = '';
+    let currentCategoryFilter = null;
+    let pieChartSlices = [];
+
+    // 初始化 Auth
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { console.error("登入失敗", err); }
+    };
+
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      const statusEl = document.getElementById('firebase-status');
+      if (user) {
+        statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
+        statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm";
+        setupFirestoreListener();
+      } else {
+        statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>離線</span>';
+        statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm";
+        if (unsubscribeFirestore) unsubscribeFirestore();
+      }
     });
 
-    function init() {
-      if (sessionStorage.getItem('app_unlocked') === 'true') {
-        document.getElementById('lock-screen').style.display = 'none';
-      } else {
-        // 電腦端嘗試自動 focus
-        setTimeout(() => { focusLockInput(); }, 100);
-      }
-      const saved = localStorage.getItem('my_expenses');
-      if(saved) records = JSON.parse(saved);
-      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
-      const container = document.getElementById('category-container');
-      container.innerHTML = CATEGORIES.map(cat => `
-        <button onclick="selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}">
-          <div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280">
-            <i class="${cat.icon} text-sm"></i>
-          </div>
-          <span class="text-[10px] transition-colors text-gray-600">${cat.name}</span>
-        </button>
-      `).join('');
-      selectCategory('food');
-      initDateFilters(true);
-      checkTokenStatus();
+    initAuth();
 
-      // 監聽網頁可見性與焦點，減少不必要的 API 請求
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          checkTokenStatus(); // 回到網頁時檢查一次
-        } else {
-          stopBackgroundCheck(); // 離開網頁時停止背景定時器
-        }
-      });
-      window.addEventListener('focus', () => {
-        const token = localStorage.getItem('gdrive_token');
-        if (token) checkCloudUpdate(token);
-      });
-
-      // 初始化圓餅圖點擊偵測事件
-      initCanvasClickListener();
-    }
-
-    function initCanvasClickListener() {
-      const canvas = document.getElementById('pieChart');
-      canvas.addEventListener('click', function(e) {
-        if (pieChartSlices.length === 0) return;
-        
-        const rect = canvas.getBoundingClientRect();
-        // 將滑鼠座標對應至 Canvas 實際解析度
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
-        
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
-        const dx = x - cx;
-        const dy = y - cy;
-        
-        // 檢查是否點擊在圓餅圖的有效半徑內 (外圈以內，內圈空洞以外)
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const radius = Math.min(cx, cy);
-        if (distance > radius || distance < radius * 0.6) return;
-
-        // 計算點擊的角度 (-PI 到 PI)
-        let angle = Math.atan2(dy, dx);
-        // 因為繪製是從 -0.5*PI 開始，我們將角度基準調整一致，方便判斷
-        if (angle < -0.5 * Math.PI) {
-            angle += 2 * Math.PI;
-        }
-
-        // 尋找點擊在哪一個切片區間內
-        const clickedSlice = pieChartSlices.find(s => angle >= s.startAngle && angle <= s.endAngle);
-        if (clickedSlice) {
-            filterByCategory(clickedSlice.id);
-        }
-      });
-    }
-
-    function initGoogleClient() {
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/drive.file',
-        callback: async (tokenResponse) => {
-          if (tokenResponse && tokenResponse.access_token) {
-            localStorage.setItem('gdrive_token', tokenResponse.access_token);
-            localStorage.setItem('gdrive_token_expiry', Date.now() + 3500 * 1000);
-            localStorage.setItem('gdrive_was_connected', 'true'); // 紀錄曾經連線過
-            updateSyncUI(true);
-            showToast('✅ 雲端連線成功！');
-            syncFromDrive(tokenResponse.access_token);
-            startBackgroundCheck();
-          } else if (tokenResponse && tokenResponse.error) {
-            console.log('背景自動連線無法完成，需要手動點擊', tokenResponse.error);
-          }
-        }
-      });
-      // 初始化後立即檢查是否需要靜默自動連線
-      checkTokenStatus();
-    }
-
-    function checkTokenStatus() {
-      const token = localStorage.getItem('gdrive_token');
-      const expiry = localStorage.getItem('gdrive_token_expiry');
-      const wasConnected = localStorage.getItem('gdrive_was_connected') === 'true';
-
-      if (token && expiry && Date.now() < parseInt(expiry)) {
-        updateSyncUI(true);
-        startBackgroundCheck();
-      } else {
-        updateSyncUI(false);
-        stopBackgroundCheck();
-        
-        // 恢復自動連線：若曾經連線過，嘗試在背景靜默取得 Token
-        if (wasConnected && tokenClient) {
-          try {
-            tokenClient.requestAccessToken({ prompt: 'none' });
-          } catch (e) {
-            console.log('自動連線失敗，請手動點擊連線', e);
-          }
-        }
-      }
-    }
-
-    function startBackgroundCheck() {
-      stopBackgroundCheck();
-      // 只有在網頁可見時才啟動定時器
-      if (document.visibilityState === 'visible') {
-        backgroundCheckInterval = setInterval(() => {
-          const token = localStorage.getItem('gdrive_token');
-          if (token) checkCloudUpdate(token);
-        }, 60000);
-      }
-    }
-
-    function stopBackgroundCheck() {
-      if (backgroundCheckInterval) {
-        clearInterval(backgroundCheckInterval);
-        backgroundCheckInterval = null;
-      }
-    }
-
-    function updateSyncUI(isConnected) {
-      const btn = document.getElementById('btn-cloud-sync');
-      const icon = document.getElementById('cloud-icon');
-      const text = document.getElementById('cloud-sync-text');
-      const label = document.getElementById('sync-status-label');
+    // 監聽雲端資料庫變更 (自動雙向同步)
+    function setupFirestoreListener() {
+      if (!currentUser) return;
+      const expensesRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses');
       
-      if (isConnected) {
-        btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all";
-        icon.className = "fas fa-cloud-check";
-        text.innerText = "已連線";
-        const lastSync = localStorage.getItem('last_sync_time');
-        if (lastSync) label.innerText = `最後同步：${lastSync}`;
-      } else {
-        btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200 text-xs font-bold shadow-sm transition-all active:scale-95";
-        icon.className = "fas fa-cloud";
-        text.innerText = "未連線";
-        label.innerText = `尚未連線同步`;
-      }
-    }
-
-    function handleCloudButtonClick() {
-      const token = localStorage.getItem('gdrive_token');
-      // Token 是否仍然有效
-      const isTokenValid = token && localStorage.getItem('gdrive_token_expiry') && Date.now() < parseInt(localStorage.getItem('gdrive_token_expiry'));
-
-      if (isTokenValid && cloudHasUpdate) {
-        syncFromDriveManual();
-      } else if (!isTokenValid) {
-        connectDrive(); // 如果無 Token 或已過期，重新連線
-      } else {
-        showToast('目前與雲端資料一致');
-      }
-    }
-
-    function connectDrive() {
-      if (GOOGLE_CLIENT_ID === '請在這裡貼上您的_CLIENT_ID') {
-        alert('請先在程式碼設定 GOOGLE_CLIENT_ID');
-        return;
-      }
-
-      if (typeof google === 'undefined' || !google.accounts) {
-        showToast('Google 服務尚未載入或被阻擋，請稍後再試');
-        return;
-      }
-
-      if (!tokenClient) {
-        initGoogleClient();
-      }
-
-      if (tokenClient) {
-        try {
-          // 強制使用者選取帳號，確保手動操作不會被瀏覽器彈出視窗阻擋
-          tokenClient.requestAccessToken({ prompt: 'select_account' });
-        } catch (error) {
-          console.error("喚起登入視窗失敗:", error);
-          showToast('無法喚起登入視窗，請檢查瀏覽器設定');
-        }
-      }
-    }
-
-    async function checkCloudUpdate(accessToken) {
-      try {
-        const fileId = localStorage.getItem('drive_file_id');
-        if (!fileId) return;
-
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const cloudModified = new Date(data.modifiedTime).getTime();
-        const localSyncTimestamp = parseInt(localStorage.getItem('last_sync_timestamp') || '0');
-
-        if (cloudModified > localSyncTimestamp + 5000) {
-          cloudHasUpdate = true;
-          document.getElementById('cloud-update-dot').classList.remove('hidden');
-        } else {
-          cloudHasUpdate = false;
-          document.getElementById('cloud-update-dot').classList.add('hidden');
-        }
-      } catch (e) { console.error("背景檢查失敗", e); }
-    }
-
-    async function syncFromDriveManual() {
-      const token = localStorage.getItem('gdrive_token');
-      if (!token) { showToast('請先連線雲端'); return; }
-      showToast('⏳ 正在同步雲端資料...');
-      await syncFromDrive(token);
-    }
-
-    async function syncFromDrive(accessToken) {
-      try {
-        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'&fields=files(id,name,modifiedTime)`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-        const searchData = await searchRes.json();
+      unsubscribeFirestore = onSnapshot(expensesRef, (snapshot) => {
+        const newRecords = [];
+        snapshot.forEach(doc => { newRecords.push(doc.data()); });
+        records = newRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
         
-        if (searchData.files && searchData.files.length > 0) {
-          const file = searchData.files[0];
-          localStorage.setItem('drive_file_id', file.id);
-
-          const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-          });
-          const cloudRecords = await contentRes.json();
-
-          // 開始合併邏輯
-          const localIds = new Set(records.map(r => r.id));
-          const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
-          
-          const cloudIds = new Set(cloudRecords.map(r => r.id));
-          const newFromLocal = records.filter(r => !cloudIds.has(r.id));
-
-          // 只要其中一邊有新東西，就進行合併
-          if (newFromCloud.length > 0 || newFromLocal.length > 0) {
-            // 合併兩邊不重複的紀錄
-            const mergedRecords = [...records, ...newFromCloud];
-            mergedRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
-            
-            records = mergedRecords;
-            localStorage.setItem('my_expenses', JSON.stringify(records));
-            
-            const now = new Date();
-            localStorage.setItem('last_sync_timestamp', now.getTime());
-            localStorage.setItem('last_sync_time', now.toLocaleTimeString());
-            
-            cloudHasUpdate = false;
-            document.getElementById('cloud-update-dot').classList.add('hidden');
-            
-            initDateFilters();
-            if(currentTab === 'stats') updateStatsView();
-            updateSyncUI(true);
-
-            // 如果本地端有新資料，合併後主動同步回雲端，確保雲端也是完整的
-            if (newFromLocal.length > 0) {
-                showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料，並同步本地新資料`);
-                executeDriveUpload(true); 
-            } else {
-                showToast(`✅ 已從雲端同步合併 ${newFromCloud.length} 筆新資料`);
-            }
-          } else {
-             // 兩邊資料完全一致，僅更新同步時間
-             const now = new Date();
-             localStorage.setItem('last_sync_timestamp', now.getTime());
-             localStorage.setItem('last_sync_time', now.toLocaleTimeString());
-             updateSyncUI(true);
-             showToast('目前資料已是最新狀態');
-          }
-        }
-      } catch (e) { console.error("同步失敗", e); }
+        // 備份到本地端防丟失
+        localStorage.setItem('my_expenses', JSON.stringify(records));
+        
+        // 更新 UI
+        initDateFilters();
+        if (currentTab === 'stats') updateStatsView();
+      }, (error) => { console.error("Firestore 同步錯誤", error); });
     }
 
-    async function executeDriveUpload(isAuto = true) {
-      const accessToken = localStorage.getItem('gdrive_token');
-      if (!accessToken) {
-         if (!isAuto) showToast('請先連線雲端');
-         return;
-      }
-      if (!isAuto) showToast('⏳ 正在同步至雲端...');
-      const fileContent = JSON.stringify(records);
-      const fileId = localStorage.getItem('drive_file_id');
-
-      try {
-        let response;
-        if (fileId) {
-           response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-             method: 'PATCH',
-             headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-             body: fileContent
-           });
-        } else {
-          const metadata = { name: SYNC_FILE_NAME, mimeType: 'application/json' };
-          const form = new FormData();
-          form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-          form.append('file', new Blob([fileContent], { type: 'application/json' }));
-          response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${accessToken}` },
-            body: form
-          });
-          if (response.ok) {
-            const data = await response.json();
-            localStorage.setItem('drive_file_id', data.id);
-          }
-        }
-
-        if (response.ok) {
-          const now = new Date();
-          localStorage.setItem('last_sync_timestamp', now.getTime());
-          localStorage.setItem('last_sync_time', now.toLocaleTimeString());
-          updateSyncUI(true);
-          if (!isAuto) showToast('✅ 雲端同步成功！');
-        } else if (response.status === 401) {
-          localStorage.removeItem('gdrive_token');
-          updateSyncUI(false);
-        }
-      } catch (e) { if (!isAuto) showToast('❌ 網路錯誤'); }
-    }
-
-    function initDateFilters(isFirstLoad = false) {
-      const yearSelect = document.getElementById('filter-year');
-      const monthSelect = document.getElementById('filter-month');
-      const currentSelectedYear = yearSelect.value;
-      const years = new Set(records.map(r => r.date.split('-')[0]));
-      const currentYear = new Date().getFullYear().toString();
-      years.add(currentYear);
-      const sortedYears = Array.from(years).sort((a, b) => b - a);
-      yearSelect.innerHTML = '<option value="all">全部年份</option>' + sortedYears.map(y => `<option value="${y}">${y}年</option>`).join('');
-      if (!isFirstLoad && currentSelectedYear && sortedYears.includes(currentSelectedYear)) {
-          yearSelect.value = currentSelectedYear;
-      } else if (isFirstLoad || !currentSelectedYear) {
-          yearSelect.value = currentYear;
-          monthSelect.value = String(new Date().getMonth() + 1).padStart(2, '0');
-      }
-    }
-
-    function selectCategory(id) {
-      selectedCategoryId = id;
-      document.querySelectorAll('.cat-btn').forEach(btn => {
-        const catId = btn.dataset.id;
-        const cat = CATEGORIES.find(c => c.id === catId);
-        const iconWrap = btn.querySelector('.icon-wrap');
-        const textSpan = btn.querySelector('span');
-        if(catId === id) {
-          btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-blue-50 border-blue-500`;
-          iconWrap.style.backgroundColor = cat.color;
-          iconWrap.style.color = 'white';
-          textSpan.className = `text-[10px] transition-colors font-bold text-blue-700`;
-        } else {
-          btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent hover:bg-gray-100`;
-          iconWrap.style.backgroundColor = '#E5E7EB';
-          iconWrap.style.color = '#6B7280';
-          textSpan.className = `text-[10px] transition-colors text-gray-600`;
-        }
-      });
-    }
-
-    function switchTab(tab) {
-      currentTab = tab;
-      document.getElementById('view-add').classList.add('hidden');
-      document.getElementById('view-stats').classList.add('hidden');
-      document.getElementById('view-settings').classList.add('hidden');
-      document.getElementById(`view-${tab}`).classList.remove('hidden');
-      document.querySelectorAll('nav button').forEach(b => {
-         b.classList.remove('text-blue-600');
-         b.classList.add('text-gray-400');
-      });
-      document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
-      if(tab === 'stats') updateStatsView();
-      const token = localStorage.getItem('gdrive_token');
-      if (token) checkCloudUpdate(token);
-    }
-
-    // --- 無縫行內編輯邏輯 ---
-    function updateRecordField(id, field, value) {
-      const index = records.findIndex(r => r.id === id);
-      if (index === -1) return;
-
-      if (field === 'amount') {
-          value = Number(value);
-          if (!value || value <= 0) {
-              showToast('無效的金額，已恢復原狀');
-              updateStatsView(); // 重新渲染以恢復舊值
-              return;
-          }
-      } else if (field === 'note') {
-          value = value.trim();
-      }
-
-      records[index][field] = value;
-      
-      // 如果修改了日期，重新排序確保順序正確
-      if (field === 'date') {
-          records.sort((a, b) => new Date(b.date) - new Date(a.date));
-          initDateFilters(); // 重新初始化日期篩選器（如果改到跨越年份/月份）
-      }
-
-      localStorage.setItem('my_expenses', JSON.stringify(records));
-      
-      updateStatsView();
-      showToast('✅ 紀錄已自動儲存');
-      executeDriveUpload(true); // 觸發雲端同步
-    }
-
-    // --- 搜尋與篩選邏輯 ---
-    function handleSearch() {
-      currentSearchQuery = document.getElementById('input-search').value.toLowerCase();
-      updateStatsView();
-    }
-
-    function clearCategoryFilter() {
-      currentCategoryFilter = null;
-      document.getElementById('btn-clear-filter').classList.add('hidden');
-      updateStatsView();
-    }
-
-    function filterByCategory(catId) {
-      if (currentCategoryFilter === catId) {
-         clearCategoryFilter(); // 點擊同一個分類則取消篩選
-      } else {
-         currentCategoryFilter = catId;
-         document.getElementById('btn-clear-filter').classList.remove('hidden');
-         updateStatsView();
-      }
-    }
-
-    function addRecord() {
+    // ==========================================
+    // ⚙️ UI 與邏輯操作 (寫入 Firebase)
+    // ==========================================
+    window.addRecord = async () => {
       const amountInput = document.getElementById('input-amount');
       const amount = Number(amountInput.value);
       if(!amount || amount <= 0) { showToast('請輸入有效的金額！'); return; }
+      
       const newRecord = { 
-        id: Date.now().toString(), 
-        amount: amount, 
-        cat: selectedCategoryId, 
-        date: document.getElementById('input-date').value, 
-        note: document.getElementById('input-note').value.trim() 
+        id: Date.now().toString(), amount, cat: selectedCategoryId, 
+        date: document.getElementById('input-date').value, note: document.getElementById('input-note').value.trim() 
       };
-      records.push(newRecord);
-      records.sort((a, b) => new Date(b.date) - new Date(a.date));
-      localStorage.setItem('my_expenses', JSON.stringify(records));
-      amountInput.value = '';
-      document.getElementById('input-note').value = '';
-      initDateFilters(); 
-      showToast('✅ 記帳成功！');
-      executeDriveUpload(true);
-    }
-
-    function deleteRecord(id) {
-      if(confirm('確定要刪除這筆紀錄嗎？')) {
-        records = records.filter(r => r.id !== id);
-        localStorage.setItem('my_expenses', JSON.stringify(records));
-        initDateFilters(); 
-        updateStatsView();
-        showToast('已刪除紀錄');
-        executeDriveUpload(true);
+      
+      if (currentUser) {
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', newRecord.id);
+        await setDoc(docRef, newRecord);
       }
-    }
+      amountInput.value = ''; document.getElementById('input-note').value = '';
+      showToast('✅ 記帳成功！');
+    };
+
+    window.deleteRecord = async (id) => {
+      if(confirm('確定要刪除這筆紀錄嗎？') && currentUser) {
+        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', id);
+        await deleteDoc(docRef);
+        showToast('已刪除紀錄');
+      }
+    };
+
+    window.updateRecordField = async (id, field, value) => {
+      if (!currentUser) return;
+      const record = records.find(r => r.id === id);
+      if (!record) return;
+
+      if (field === 'amount') {
+          value = Number(value);
+          if (!value || value <= 0) { showToast('無效金額'); updateStatsView(); return; }
+      } else if (field === 'note') value = value.trim();
+
+      const updatedRecord = { ...record, [field]: value };
+      const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', id);
+      await setDoc(docRef, updatedRecord, { merge: true });
+      showToast('✅ 紀錄已自動儲存');
+    };
+
+    window.clearAllData = async () => {
+      if(confirm('警告：這將會刪除所有資料，確定要繼續嗎？') && currentUser) {
+        // 清空 Firebase 中的所有文件
+        for (const record of records) {
+          const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', record.id);
+          await deleteDoc(docRef);
+        }
+        showToast('已清空所有資料');
+      }
+    };
+
+    // UI 切換邏輯
+    window.switchTab = (tab) => {
+      currentTab = tab;
+      ['add', 'stats', 'settings'].forEach(t => document.getElementById(`view-${t}`).classList.add('hidden'));
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+      document.querySelectorAll('nav button').forEach(b => { b.classList.remove('text-blue-600'); b.classList.add('text-gray-400'); });
+      document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
+      if(tab === 'stats') updateStatsView();
+    };
+
+    window.selectCategory = (id) => {
+      selectedCategoryId = id;
+      document.querySelectorAll('.cat-btn').forEach(btn => {
+        const cat = CATEGORIES.find(c => c.id === btn.dataset.id);
+        const iconWrap = btn.querySelector('.icon-wrap');
+        const textSpan = btn.querySelector('span');
+        if(btn.dataset.id === id) {
+          btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-blue-50 border-blue-500`;
+          iconWrap.style.backgroundColor = cat.color; iconWrap.style.color = 'white';
+          textSpan.className = `text-[10px] transition-colors font-bold text-blue-700`;
+        } else {
+          btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent hover:bg-gray-100`;
+          iconWrap.style.backgroundColor = '#E5E7EB'; iconWrap.style.color = '#6B7280';
+          textSpan.className = `text-[10px] transition-colors text-gray-600`;
+        }
+      });
+    };
 
     function showToast(msg) {
       const toast = document.getElementById('toast');
@@ -813,39 +393,36 @@
       toast.classList.remove('opacity-0');
       setTimeout(() => toast.classList.add('opacity-0'), 2000);
     }
-
-    function updateStatsView() {
+    
+    // 初始化畫面
+    function initUI() {
+      if (sessionStorage.getItem('app_unlocked') !== 'true') setTimeout(() => { window.focusLockInput(); }, 100);
+      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('category-container').innerHTML = CATEGORIES.map(cat => `
+        <button onclick="selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}">
+          <div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280">
+            <i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600">${cat.name}</span>
+        </button>`).join('');
+      window.selectCategory('food');
+    }
+    
+    // 統計畫面繪製 (沿用原本邏輯)
+    window.updateStatsView = function updateStatsView() {
       const selectedYear = document.getElementById('filter-year').value;
       const selectedMonth = document.getElementById('filter-month').value;
       const monthSelect = document.getElementById('filter-month');
+      if (selectedYear === 'all') { monthSelect.value = 'all'; monthSelect.disabled = true; monthSelect.classList.add('opacity-50', 'bg-gray-100'); } 
+      else { monthSelect.disabled = false; monthSelect.classList.remove('opacity-50', 'bg-gray-100'); }
       
-      if (selectedYear === 'all') {
-          monthSelect.value = 'all'; monthSelect.disabled = true; monthSelect.classList.add('opacity-50', 'bg-gray-100');
-      } else {
-          monthSelect.disabled = false; monthSelect.classList.remove('opacity-50', 'bg-gray-100');
-      }
-      
-      let filteredRecords = records;
-      let titleText = '累積總支出';
-      
-      // 1. 日期篩選
+      let filteredRecords = records; let titleText = '累積總支出';
       if (selectedYear !== 'all') {
-          if (selectedMonth !== 'all') {
-              const prefix = `${selectedYear}-${selectedMonth}`;
-              filteredRecords = filteredRecords.filter(r => r.date.startsWith(prefix));
-              titleText = `${selectedYear}年 ${parseInt(selectedMonth)}月 總支出`;
-          } else {
-              filteredRecords = filteredRecords.filter(r => r.date.startsWith(selectedYear));
-              titleText = `${selectedYear}年 總支出`;
-          }
+          if (selectedMonth !== 'all') { filteredRecords = filteredRecords.filter(r => r.date.startsWith(`${selectedYear}-${selectedMonth}`)); titleText = `${selectedYear}年 ${parseInt(selectedMonth)}月 總支出`; } 
+          else { filteredRecords = filteredRecords.filter(r => r.date.startsWith(selectedYear)); titleText = `${selectedYear}年 總支出`; }
       }
-
-      // 2. 文字搜尋篩選 (套用於圖表與列表)
       if (currentSearchQuery) {
           filteredRecords = filteredRecords.filter(r => {
              const catName = CATEGORIES.find(c => c.id === r.cat)?.name || '';
-             const noteText = r.note ? r.note.toLowerCase() : '';
-             return noteText.includes(currentSearchQuery) || catName.includes(currentSearchQuery);
+             return (r.note && r.note.toLowerCase().includes(currentSearchQuery)) || catName.includes(currentSearchQuery);
           });
       }
 
@@ -854,332 +431,182 @@
       filteredRecords.forEach(r => { total += r.amount; totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; });
       document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
       
-      const canvas = document.getElementById('pieChart');
-      const ctx = canvas.getContext('2d');
+      const canvas = document.getElementById('pieChart'); const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = Math.min(cx, cy);
-      
-      pieChartSlices = []; // 重置切片陣列
+      const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = Math.min(cx, cy); pieChartSlices = [];
       
       if(total === 0) {
         ctx.fillStyle = '#f3f4f6'; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
         document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
       } else {
-        // 由正上方 (-90度) 開始繪製
-        let startAngle = -0.5 * Math.PI; 
-        let breakdownArr = [];
-        
+        let startAngle = -0.5 * Math.PI; let breakdownArr = [];
         CATEGORIES.forEach(cat => {
           if(totalsByCat[cat.id]) {
-             const amount = totalsByCat[cat.id]; 
-             const sliceAngle = (amount / total) * 2 * Math.PI;
-             const endAngle = startAngle + sliceAngle;
-             
-             ctx.fillStyle = cat.color; 
-             ctx.beginPath(); 
-             ctx.moveTo(cx, cy); 
-             ctx.arc(cx, cy, radius, startAngle, endAngle); 
-             ctx.closePath(); 
-             ctx.fill(); 
-             
-             // 紀錄角度以供點擊偵測
-             pieChartSlices.push({ id: cat.id, startAngle, endAngle });
-             startAngle = endAngle;
-             
-             const percent = ((amount / total) * 100).toFixed(1); 
-             breakdownArr.push({ ...cat, amount, percent });
+             const amount = totalsByCat[cat.id]; const sliceAngle = (amount / total) * 2 * Math.PI; const endAngle = startAngle + sliceAngle;
+             ctx.fillStyle = cat.color; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
+             pieChartSlices.push({ id: cat.id, startAngle, endAngle }); startAngle = endAngle;
+             breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1) });
           }
         });
         ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
         breakdownArr.sort((a,b) => b.amount - a.amount);
-        
-        // 生成分類明細 (加入點擊篩選事件與視覺回饋)
         document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `
           <div onclick="filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}">
-             <div class="flex items-center">
-               <div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div>
-               <span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span>
-             </div>
-             <div class="flex items-center space-x-2">
-               <span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span>
-               <span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span>
-             </div>
-          </div>
-        `).join('');
+             <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div><span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span></div>
+             <div class="flex items-center space-x-2"><span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span><span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span></div>
+          </div>`).join('');
       }
 
-      // 3. 分類點擊篩選 (僅套用於下方的歷史清單)
-      let listRecords = filteredRecords;
-      if (currentCategoryFilter) {
-          listRecords = listRecords.filter(r => r.cat === currentCategoryFilter);
-      }
-
-      // 更新清單標題
+      let listRecords = currentCategoryFilter ? filteredRecords.filter(r => r.cat === currentCategoryFilter) : filteredRecords;
       const listTitle = document.getElementById('history-list-title');
       if (currentSearchQuery || currentCategoryFilter) {
           let catName = currentCategoryFilter ? CATEGORIES.find(c => c.id === currentCategoryFilter).name : '';
           listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${catName}</span>`;
-      } else {
-          listTitle.innerHTML = '區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊直接修改)</span>';
-      }
+      } else listTitle.innerHTML = '區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊直接修改)</span>';
 
       const historyContainer = document.getElementById('history-list');
-      if(listRecords.length === 0) { 
-         historyContainer.innerHTML = '<div class="text-center py-6 text-gray-400 text-sm">此區間/條件下尚未有記帳紀錄</div>'; 
+      if(listRecords.length === 0) { historyContainer.innerHTML = '<div class="text-center py-6 text-gray-400 text-sm">此區間/條件下尚未有記帳紀錄</div>'; 
       } else {
-         // 生成所有分類選項供下拉選單使用
          const catOptionsTemplate = CATEGORIES.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-
          historyContainer.innerHTML = listRecords.map(r => {
            const cat = CATEGORIES.find(c => c.id === r.cat) || CATEGORIES[6];
-           
-           // 動態將當前分類設為 selected
            const currentCatOptions = catOptionsTemplate.replace(`value="${cat.id}"`, `value="${cat.id}" selected`);
-
-           return `
-             <div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative">
+           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative">
                <div class="flex items-center space-x-3 w-[65%]">
-                 
-                 <!-- 左側圖示區塊 (覆蓋透明 select 達成點擊修改分類) -->
                  <div class="relative shrink-0 cursor-pointer" title="更換分類">
-                   <select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                      ${currentCatOptions}
-                   </select>
-                   <div class="p-3 rounded-full flex items-center justify-center transition-transform group-hover:scale-105" style="background-color: ${cat.color}20; color: ${cat.color}">
-                     <i class="${cat.icon} text-sm"></i>
-                   </div>
+                   <select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select>
+                   <div class="p-3 rounded-full flex items-center justify-center" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
                  </div>
-                 
-                 <!-- 中間資訊區塊 -->
                  <div class="overflow-hidden flex-1">
                    <div class="font-bold text-gray-800 text-sm flex items-center relative">
-                      <!-- 分類名稱 (同樣覆蓋透明 select) -->
-                      <div class="relative cursor-pointer">
-                        <select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                          ${currentCatOptions}
-                        </select>
-                        <span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span>
-                      </div>
-                      ${r.id.startsWith('INV') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}
+                      <div class="relative cursor-pointer"><select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>
                    </div>
-                   
                    <div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">
-                     <!-- 隱形日期輸入框 -->
-                     <input type="date" value="${r.date}" onchange="updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10" title="修改日期">
-                     <span>•</span>
-                     <!-- 隱形備註輸入框 -->
-                     <input type="text" value="${r.note}" placeholder="新增備註..." onchange="updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註">
+                     <input type="date" value="${r.date}" onchange="updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10">
+                     <span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10">
                    </div>
                  </div>
                </div>
-               
-               <!-- 右側金額與刪除區塊 -->
-               <div class="flex items-center justify-end space-x-1 w-[35%]">
-                 <span class="font-bold text-gray-800 text-sm">$</span>
-                 <!-- 隱形金額輸入框 -->
-                 <input type="number" value="${r.amount}" onchange="updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold text-gray-800 transition-colors relative z-10" title="修改金額" inputmode="numeric">
+               <div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold text-gray-800 text-sm">$</span>
+                 <input type="number" value="${r.amount}" onchange="updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold text-gray-800 transition-colors relative z-10" inputmode="numeric">
                  <button onclick="deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button>
                </div>
-             </div>
-           `;
+             </div>`;
          }).join('');
       }
+    };
+
+    window.handleSearch = () => { currentSearchQuery = document.getElementById('input-search').value.toLowerCase(); window.updateStatsView(); };
+    window.clearCategoryFilter = () => { currentCategoryFilter = null; document.getElementById('btn-clear-filter').classList.add('hidden'); window.updateStatsView(); };
+    window.filterByCategory = (catId) => {
+      if (currentCategoryFilter === catId) window.clearCategoryFilter();
+      else { currentCategoryFilter = catId; document.getElementById('btn-clear-filter').classList.remove('hidden'); window.updateStatsView(); }
+    };
+    function initDateFilters(isFirstLoad = false) {
+      const yearSelect = document.getElementById('filter-year'); const monthSelect = document.getElementById('filter-month');
+      const currentSelectedYear = yearSelect.value; const years = new Set(records.map(r => r.date.split('-')[0]));
+      const currentYear = new Date().getFullYear().toString(); years.add(currentYear);
+      const sortedYears = Array.from(years).sort((a, b) => b - a);
+      yearSelect.innerHTML = '<option value="all">全部年份</option>' + sortedYears.map(y => `<option value="${y}">${y}年</option>`).join('');
+      if (!isFirstLoad && currentSelectedYear && sortedYears.includes(currentSelectedYear)) yearSelect.value = currentSelectedYear;
+      else if (isFirstLoad || !currentSelectedYear) { yearSelect.value = currentYear; monthSelect.value = String(new Date().getMonth() + 1).padStart(2, '0'); }
     }
 
     // ==========================================
-    // 🧾 雲端發票 CSV 解析與匯入邏輯 (進階版)
+    // 📁 Google Drive 手動備份機制 (純手動觸發)
     // ==========================================
-    function autoCategorize(shopName) {
-      const name = shopName.toLowerCase();
-      if(name.match(/統一超商|全家|萊爾富|ＯＫ|麥當勞|肯德基|摩斯|星巴克|八方雲集|便當|麵|飲料|茶|餐廳|咖啡|食堂|烘焙|好市多|和德昌|三商|餐飲|購好康|爭鮮|壽司|飲店|牛乳大王|食品|家福|統一|鼎城小吃/)) return 'food';
-      if(name.match(/全聯|大潤發|家樂福|愛買|寶雅|屈臣氏|康是美|五金|水電|瓦斯|電信|電力|水費|特力屋|土地開發基金|小米|富邦媒體|宜家家居|自來水|金興發/)) return 'housing';
-      if(name.match(/中油|台塑|加油|停車|台鐵|高鐵|捷運|客運|計程車|uber|機車|汽車/)) return 'transport';
-      if(name.match(/uniqlo|net|服飾|鞋|包|百貨|年青人眼鏡/)) return 'clothes';
-      if(name.match(/威秀|國賓|影城|電影|ktv|遊戲|app store|google play|蝦皮|健身|台灣迪卡儂/)) return 'entertainment';
-      if(name.match(/書局|博客來|誠品|補習|文具/)) return 'education';
-      return 'other'; 
-    }
+    const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
+    let tokenClient;
+    const SYNC_FILE_NAME = '極簡記帳備份_AutoSync.json';
 
-    // 嚴謹的 CSV 分割工具：能正確處理引號與空欄位
-    function parseCSVLine(line) {
-        const result = [];
-        let curVal = '';
-        let inQuotes = false;
-        for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            if (inQuotes) {
-                if (char === '"') {
-                    if (i + 1 < line.length && line[i + 1] === '"') {
-                        curVal += '"'; i++;
-                    } else {
-                        inQuotes = false;
-                    }
-                } else {
-                    curVal += char;
-                }
-            } else {
-                if (char === '"') {
-                    inQuotes = true;
-                } else if (char === ',') {
-                    result.push(curVal);
-                    curVal = '';
-                } else {
-                    curVal += char;
-                }
-            }
-        }
-        result.push(curVal);
-        return result.map(v => v.trim());
-    }
-
-    function importInvoiceCSV(event) {
-      const file = event.target.files[0];
-      if(!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const text = e.target.result;
-          const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-          
-          let newRecordsCount = 0;
-          let skipCount = 0;
-          const invoiceMap = new Map();
-
-          // 從第二行開始解析 (跳過標題列)
-          for(let i = 1; i < lines.length; i++) {
-             const cols = parseCSVLine(lines[i]);
-             
-             // 確保至少有足夠的欄位數量 (財政部格式通常有 14 欄)
-             if(cols.length >= 8) {
-                const invoiceNum = cols[2]; 
-                // 發票號碼基本格式檢查 (2碼英文+8碼數字)
-                if(!invoiceNum || !invoiceNum.match(/^[A-Z0-9]{2}\d{8}$/)) continue; 
-
-                const dateRaw = cols[1];    
-                const amount = parseInt(cols[3]); 
-                const shopName = cols[7];   
-                const itemName = cols.length >= 14 ? cols[13] : ''; 
-                
-                if(isNaN(amount)) continue;
-
-                // 如果是新發票，建立一筆字典紀錄
-                if(!invoiceMap.has(invoiceNum)) {
-                    invoiceMap.set(invoiceNum, {
-                        dateRaw,
-                        amount,
-                        shopName,
-                        items: itemName ? [itemName] : []
-                    });
-                } else {
-                    // 如果發票已存在，把這行的新品項加進清單中 (避免同一發票重複記帳)
-                    const data = invoiceMap.get(invoiceNum);
-                    if(itemName && !data.items.includes(itemName)) {
-                        data.items.push(itemName);
-                    }
-                    // 以防萬一，取最大金額作為該發票總額
-                    if(amount > data.amount) {
-                        data.amount = amount;
-                    }
-                }
-             }
+    window.initGoogleClient = () => {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: async (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+             const action = localStorage.getItem('pending_drive_action');
+             if(action === 'upload') await performDriveUpload(tokenResponse.access_token);
+             else if(action === 'download') await performDriveDownload(tokenResponse.access_token);
           }
-
-          // 將整理好的發票群組，轉換成記帳紀錄
-          invoiceMap.forEach((data, invoiceNum) => {
-              // 處理日期格式轉換
-              let formattedDate = new Date().toISOString().split('T')[0];
-              if(data.dateRaw.length === 8 && !data.dateRaw.includes('/')) {
-                 formattedDate = `${data.dateRaw.substring(0,4)}-${data.dateRaw.substring(4,6)}-${data.dateRaw.substring(6,8)}`;
-              } else if (data.dateRaw.includes('/')) {
-                 formattedDate = data.dateRaw.replace(/\//g, '-');
-              }
-
-              const recordId = `INV_${invoiceNum}`;
-              const exists = records.some(r => r.id === recordId);
-              
-              if(!exists) {
-                 const category = autoCategorize(data.shopName);
-                 
-                 // 組合備註：最多顯示 2 個品名，超過加上 ...
-                 let itemStr = data.items.slice(0, 2).join('、');
-                 if(data.items.length > 2) itemStr += '...';
-
-                 records.push({
-                   id: recordId,
-                   amount: data.amount,
-                   cat: category,
-                   date: formattedDate,
-                   note: `${data.shopName}${itemStr ? ` (${itemStr})` : ''}`
-                 });
-                 newRecordsCount++;
-              } else {
-                 skipCount++;
-              }
-          });
-
-          if(newRecordsCount > 0) {
-            records.sort((a, b) => new Date(b.date) - new Date(a.date));
-            localStorage.setItem('my_expenses', JSON.stringify(records));
-            initDateFilters();
-            if(currentTab === 'stats') updateStatsView();
-            showToast(`✅ 成功匯入 ${newRecordsCount} 張發票 (略過 ${skipCount} 張重複)`);
-            executeDriveUpload(true); // 匯入後自動上傳雲端
-          } else {
-            showToast(`⚠️ 沒有找到新發票 (略過 ${skipCount} 張重複)`);
-          }
-
-        } catch(err) { 
-          console.error(err);
-          showToast('❌ 無法解析發票 CSV 檔案'); 
         }
-        event.target.value = ''; // 清空 input 讓下次可以選同一個檔案
-      };
+      });
+    };
+
+    window.executeDriveUpload = () => {
+      if (!tokenClient) { showToast("正在載入服務，請稍後"); return; }
+      localStorage.setItem('pending_drive_action', 'upload');
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    };
+
+    window.syncFromDriveManual = () => {
+      if (!tokenClient) { showToast("正在載入服務，請稍後"); return; }
+      localStorage.setItem('pending_drive_action', 'download');
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    };
+
+    async function performDriveUpload(accessToken) {
+      showToast('⏳ 正在上傳至 Google Drive...');
+      const fileContent = JSON.stringify(records);
+      let fileId = localStorage.getItem('drive_file_id');
       
-      // 讀取為文字，使用 UTF-8
-      reader.readAsText(file, 'UTF-8'); 
+      try {
+        if (!fileId) {
+          // 搜尋檔案是否存在
+          const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+          const searchData = await searchRes.json();
+          if (searchData.files && searchData.files.length > 0) fileId = searchData.files[0].id;
+        }
+
+        let response;
+        if (fileId) {
+           response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: fileContent });
+        } else {
+          const form = new FormData();
+          form.append('metadata', new Blob([JSON.stringify({ name: SYNC_FILE_NAME, mimeType: 'application/json' })], { type: 'application/json' }));
+          form.append('file', new Blob([fileContent], { type: 'application/json' }));
+          response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}` }, body: form });
+        }
+
+        if (response.ok) {
+           const data = await response.json(); localStorage.setItem('drive_file_id', data.id || fileId);
+           showToast('✅ 成功備份至 Google Drive！');
+        } else showToast('❌ 備份失敗');
+      } catch (e) { showToast('❌ 網路錯誤'); }
     }
 
-    // ==========================================
-    // 傳統 JSON 備份與還原
-    // ==========================================
-    function exportData() {
-      if(records.length === 0) { showToast('沒有資料可以匯出'); return; }
-      const dataStr = JSON.stringify(records);
-      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-      const fileName = `expense_backup_${new Date().toISOString().split('T')[0]}.json`;
-      const link = document.createElement('a');
-      link.setAttribute('href', dataUri);
-      link.setAttribute('download', fileName); link.click();
-      showToast('✅ 備份檔案已下載');
+    async function performDriveDownload(accessToken) {
+      showToast('⏳ 正在從 Google Drive 讀取...');
+      try {
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        const searchData = await searchRes.json();
+        
+        if (searchData.files && searchData.files.length > 0) {
+          const fileId = searchData.files[0].id;
+          const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+          const cloudRecords = await contentRes.json();
+          
+          // 與現有資料庫合併
+          const localIds = new Set(records.map(r => r.id));
+          const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
+          
+          if (newFromCloud.length > 0) {
+            for (const record of newFromCloud) {
+              const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', record.id);
+              await setDoc(docRef, record); // 直接寫入 Firebase，監聽器會自動抓回更新 UI
+            }
+            showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料`);
+          } else {
+            showToast('目前資料已是最新狀態');
+          }
+        } else {
+          showToast('❌ 雲端硬碟中找不到備份檔');
+        }
+      } catch (e) { showToast('❌ 下載失敗'); }
     }
 
-    function importData(event) {
-      const file = event.target.files[0]; if(!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const imported = JSON.parse(e.target.result);
-          if(Array.isArray(imported)) {
-            records = imported; localStorage.setItem('my_expenses', JSON.stringify(records));
-            initDateFilters(); showToast('✅ 資料還原成功'); executeDriveUpload(true);
-          } else { showToast('❌ 檔案格式錯誤'); }
-        } catch(err) { showToast('❌ 無法解析檔案'); }
-        event.target.value = ''; 
-      };
-      reader.readAsText(file);
-    }
-
-    function clearAllData() {
-      if(confirm('警告：這將會刪除所有資料，確定要繼續嗎？')) {
-        records = []; localStorage.removeItem('my_expenses');
-        initDateFilters(); showToast('已清空所有資料'); executeDriveUpload(true);
-      }
-    }
-    
-    window.onload = init;
+    initUI();
   </script>
-  <!-- 將外部 API 載入移到底部，確保 initGoogleClient 已建立 -->
   <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleClient()"></script>
 </body>
 </html>
