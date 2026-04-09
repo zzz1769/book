@@ -17,8 +17,27 @@
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
+  <!-- 密碼鎖畫面 (可視需求移除，因為已有登入系統，但暫時保留) -->
+  <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300 cursor-pointer" onclick="focusLockInput()">
+    <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform" onclick="event.stopPropagation();">
+      <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+        <i class="fas fa-lock text-2xl"></i>
+      </div>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">需要解鎖</h2>
+      <p class="text-sm text-gray-500 mb-2">請輸入密碼以存取您的記帳資料</p>
+      <p class="text-xs text-blue-500 mb-6 font-medium">(若手機鍵盤未彈出，請點擊輸入框)</p>
+      
+      <input type="password" id="lock-password" inputmode="numeric" pattern="[0-9]*" class="w-full text-center text-3xl tracking-[0.5em] p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors mb-2" placeholder="••••">
+      <p id="lock-error" class="text-red-500 text-sm mb-4 h-5 opacity-0 transition-opacity">密碼錯誤，請重試</p>
+      
+      <button onclick="checkPassword()" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
+        解鎖進入
+      </button>
+    </div>
+  </div>
+
   <!-- 認證登入/註冊畫面 (改為 Google 登入) -->
-  <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
+  <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[90] flex flex-col items-center justify-center transition-opacity duration-300">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
         <i class="fab fa-google text-3xl"></i>
@@ -26,7 +45,7 @@
       <h2 id="auth-title" class="text-xl font-bold text-gray-800 mb-2">歡迎來到極簡記帳</h2>
       <p class="text-sm text-gray-500 mb-8">請使用 Google 帳號登入以同步您的雲端資料</p>
       
-      <p id="auth-error" class="text-red-500 text-xs mb-4 h-4 opacity-0 transition-opacity">錯誤訊息</p>
+      <p id="auth-error" class="text-red-500 text-xs mb-4 h-auto opacity-0 transition-opacity">錯誤訊息</p>
       
       <button id="auth-submit-btn" onclick="signInWithGoogle()" class="w-full flex items-center justify-center py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-sm transition-all active:scale-[0.98] mb-4">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5 mr-3" alt="Google">
@@ -189,31 +208,50 @@
   <!-- 使用 Type="module" 引入 Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // ==========================================
-    // 🔥 Firebase 設定與初始化
+    // 🔒 密碼鎖設定
     // ==========================================
-    let firebaseConfig;
-    if (typeof __firebase_config !== 'undefined') {
-      firebaseConfig = JSON.parse(__firebase_config); // Canvas 預覽環境自動配置
-    } else {
-      // 請將您的設定貼在下方
-      firebaseConfig = {
-          apiKey: "AIzaSyDl3IYAAQGCwKLaSVGdY4ewZZlhVmu7dUg",
-          authDomain: "book-dad94.firebaseapp.com",
-          projectId: "book-dad94",
-          storageBucket: "book-dad94.firebasestorage.app",
-          messagingSenderId: "9435949525",
-          appId: "1:9435949525:web:979b0a1afea30e40fcb55c"
-      };
+    const TARGET_HASH = 1625059299;
+    function generateHash(str) {
+      return str.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
     }
+    window.focusLockInput = () => { const lockInput = document.getElementById('lock-password'); if (lockInput) lockInput.focus(); };
+    window.checkPassword = () => {
+      const input = document.getElementById('lock-password').value;
+      const errorMsg = document.getElementById('lock-error');
+      if (generateHash(input) === TARGET_HASH) {
+        sessionStorage.setItem('app_unlocked', 'true');
+        const lockScreen = document.getElementById('lock-screen');
+        lockScreen.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => { lockScreen.style.display = 'none'; }, 300);
+      } else {
+        errorMsg.classList.remove('opacity-0');
+        document.getElementById('lock-password').value = '';
+        setTimeout(() => { errorMsg.classList.add('opacity-0'); }, 2000);
+      }
+    };
+
+    // ==========================================
+    // 🔥 Firebase 設定與初始化 (已移除環境判斷，純淨版本)
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDl3IYAAQGCwKLaSVGdY4ewZZlhVmu7dUg",
+      authDomain: "book-dad94.firebaseapp.com",
+      projectId: "book-dad94",
+      storageBucket: "book-dad94.firebasestorage.app",
+      messagingSenderId: "9435949525",
+      appId: "1:9435949525:web:979b0a1afea30e40fcb55c"
+    };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'my-expense-app';
+    
+    // 使用您的 Firebase Project ID 作為固定 appId
+    const appId = 'book-dad94'; 
     const googleProvider = new GoogleAuthProvider();
     
     let currentUser = null;
@@ -245,11 +283,22 @@
        errorEl.classList.add('opacity-0');
        
        try {
+           // 加入參數，強制顯示帳號選擇，減少快取問題
+           googleProvider.setCustomParameters({ prompt: 'select_account' });
            await signInWithPopup(auth, googleProvider);
            // 成功後 onAuthStateChanged 會自動處理 UI 變化
        } catch (error) {
-           console.error(error);
-           errorEl.innerText = '登入失敗，請稍後再試。';
+           console.error("Google 登入錯誤:", error);
+           
+           if (error.code === 'auth/popup-closed-by-user') {
+               errorEl.innerText = '您關閉了登入視窗。';
+           } else if (error.code === 'auth/unauthorized-domain') {
+               errorEl.innerText = '此網址未被允許登入。請在 Firebase 控制台的「Authentication」>「設定」>「授權網域」加入您的網址。';
+           } else if (error.code === 'auth/configuration-not-found') {
+               errorEl.innerText = '登入失敗。請檢查 Firebase 後台是否已將「專案支援電子郵件」設定完成。';
+           } else {
+               errorEl.innerText = `發生錯誤 (${error.code})。`;
+           }
            errorEl.classList.remove('opacity-0');
        }
     };
@@ -259,15 +308,7 @@
        showToast('已登出帳號');
     };
 
-    // 初始化 Auth
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        }
-      } catch (err) { console.error("登入失敗", err); }
-    };
-
+    // 監聽登入狀態變化
     onAuthStateChanged(auth, (user) => {
       currentUser = user;
       const statusEl = document.getElementById('firebase-status');
@@ -286,7 +327,7 @@
         statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>離線</span>';
         statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm";
         
-        // 未登入，顯示登入畫面並清空本地顯示暫存資料，確保隱私安全
+        // 未登入，顯示登入畫面並清空本地顯示資料
         authScreen.style.display = 'flex';
         void authScreen.offsetWidth; // 強制重繪
         authScreen.classList.remove('opacity-0', 'pointer-events-none');
@@ -297,22 +338,20 @@
       }
     });
 
-    initAuth();
-
-    // 監聽雲端資料庫變更 (自動雙向同步)
+    // 監聽雲端資料庫變更
     function setupFirestoreListener() {
       if (!currentUser) return;
-      const expensesRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses');
+      
+      // 使用更標準且短的路徑： users/{uid}/expenses
+      const expensesRef = collection(db, 'users', currentUser.uid, 'expenses');
       
       unsubscribeFirestore = onSnapshot(expensesRef, (snapshot) => {
         const newRecords = [];
         snapshot.forEach(doc => { newRecords.push(doc.data()); });
         records = newRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
         
-        // 備份到本地端防丟失
         localStorage.setItem('my_expenses', JSON.stringify(records));
         
-        // 更新 UI
         initDateFilters();
         if (currentTab === 'stats') updateStatsView();
       }, (error) => { console.error("Firestore 同步錯誤", error); });
@@ -332,7 +371,7 @@
       };
       
       if (currentUser) {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', newRecord.id);
+        const docRef = doc(db, 'users', currentUser.uid, 'expenses', newRecord.id);
         await setDoc(docRef, newRecord);
       }
       amountInput.value = ''; document.getElementById('input-note').value = '';
@@ -341,7 +380,7 @@
 
     window.deleteRecord = async (id) => {
       if(confirm('確定要刪除這筆紀錄嗎？') && currentUser) {
-        const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', id);
+        const docRef = doc(db, 'users', currentUser.uid, 'expenses', id);
         await deleteDoc(docRef);
         showToast('已刪除紀錄');
       }
@@ -358,16 +397,15 @@
       } else if (field === 'note') value = value.trim();
 
       const updatedRecord = { ...record, [field]: value };
-      const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', id);
+      const docRef = doc(db, 'users', currentUser.uid, 'expenses', id);
       await setDoc(docRef, updatedRecord, { merge: true });
       showToast('✅ 紀錄已自動儲存');
     };
 
     window.clearAllData = async () => {
       if(confirm('警告：這將會刪除所有資料，確定要繼續嗎？') && currentUser) {
-        // 清空 Firebase 中的所有文件
         for (const record of records) {
-          const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', record.id);
+          const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
           await deleteDoc(docRef);
         }
         showToast('已清空所有資料');
@@ -411,6 +449,7 @@
     
     // 初始化畫面
     function initUI() {
+      if (sessionStorage.getItem('app_unlocked') !== 'true') setTimeout(() => { window.focusLockInput(); }, 100);
       document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
       document.getElementById('category-container').innerHTML = CATEGORIES.map(cat => `
         <button onclick="selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}">
@@ -420,7 +459,7 @@
       window.selectCategory('food');
     }
     
-    // 統計畫面繪製 (沿用原本邏輯)
+    // 統計畫面繪製 
     window.updateStatsView = function updateStatsView() {
       const selectedYear = document.getElementById('filter-year').value;
       const selectedMonth = document.getElementById('filter-month').value;
@@ -527,7 +566,7 @@
     }
 
     // ==========================================
-    // 📁 Google Drive 手動備份機制 (純手動觸發)
+    // 📁 Google Drive 手動備份機制 
     // ==========================================
     const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
     let tokenClient;
@@ -548,7 +587,6 @@
       });
     };
 
-    // 解決 Module 載入順序與外部腳本不同步的問題
     const checkGoogleLoaded = setInterval(() => {
       if (typeof google !== 'undefined' && google.accounts) {
         window.initGoogleClient();
@@ -576,7 +614,6 @@
       
       try {
         if (!fileId) {
-          // 搜尋檔案是否存在 (修正搜尋網址編碼問題)
           const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
           const searchData = await searchRes.json();
           if (searchData.files && searchData.files.length > 0) fileId = searchData.files[0].id;
@@ -611,14 +648,13 @@
           const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
           const cloudRecords = await contentRes.json();
           
-          // 與現有資料庫合併
           const localIds = new Set(records.map(r => r.id));
           const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
           
           if (newFromCloud.length > 0) {
             for (const record of newFromCloud) {
-              const docRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'expenses', record.id);
-              await setDoc(docRef, record); // 直接寫入 Firebase，監聽器會自動抓回更新 UI
+              const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
+              await setDoc(docRef, record);
             }
             showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料`);
           } else {
@@ -632,7 +668,6 @@
 
     initUI();
   </script>
-  <!-- 移除原先寫在這邊有機會提早觸發失效的 onload 事件 -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>
