@@ -256,6 +256,7 @@
     
     let currentUser = null;
     let unsubscribeFirestore = null;
+    let isSigningIn = false; // 防連點鎖
 
     // 基礎參數
     let records = [];
@@ -279,8 +280,14 @@
     // ==========================================
     
     window.signInWithGoogle = async () => {
+       if (isSigningIn) return; // 如果正在登入中，直接忽略後續點擊 (防連點)
+       isSigningIn = true;
+       
        const errorEl = document.getElementById('auth-error');
+       const btnEl = document.getElementById('auth-submit-btn');
+       
        errorEl.classList.add('opacity-0');
+       btnEl.classList.add('opacity-50', 'pointer-events-none'); // 暫時讓按鈕變半透明且無法點擊
        
        try {
            // 加入參數，強制顯示帳號選擇，減少快取問題
@@ -292,6 +299,8 @@
            
            if (error.code === 'auth/popup-closed-by-user') {
                errorEl.innerText = '您關閉了登入視窗。';
+           } else if (error.code === 'auth/cancelled-popup-request') {
+               errorEl.innerText = '系統正在處理登入，請勿連續點擊按鈕。';
            } else if (error.code === 'auth/unauthorized-domain') {
                errorEl.innerText = '此網址未被允許登入。請在 Firebase 控制台的「Authentication」>「設定」>「授權網域」加入您的網址。';
            } else if (error.code === 'auth/configuration-not-found') {
@@ -300,6 +309,9 @@
                errorEl.innerText = `發生錯誤 (${error.code})。`;
            }
            errorEl.classList.remove('opacity-0');
+       } finally {
+           isSigningIn = false; // 解除鎖定
+           btnEl.classList.remove('opacity-50', 'pointer-events-none');
        }
     };
 
