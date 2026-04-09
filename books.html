@@ -649,7 +649,7 @@
     };
 
     // ==========================================
-    // 📁 Google Drive 手動備份機制 
+    // 📁 Google Drive 手動備份機制 (增強錯誤捕捉版)
     // ==========================================
     const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
     let tokenClient;
@@ -698,6 +698,11 @@
       try {
         if (!fileId) {
           const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+          
+          if (!searchRes.ok) {
+              const errText = await searchRes.text();
+              throw new Error(`API 搜尋請求失敗 (${searchRes.status}): ${errText}`);
+          }
           const searchData = await searchRes.json();
           if (searchData.error) throw new Error(searchData.error.message || "API 存取被拒");
           if (searchData.files && searchData.files.length > 0) fileId = searchData.files[0].id;
@@ -717,12 +722,19 @@
            const data = await response.json(); localStorage.setItem('drive_file_id', data.id || fileId);
            showToast('✅ 成功備份至 Google Drive！');
         } else {
-           const errData = await response.json();
-           throw new Error(errData.error?.message || '寫入失敗');
+           const errText = await response.text();
+           throw new Error(`檔案寫入失敗 (${response.status}): ${errText}`);
         }
-      } catch (e) { 
-        console.error("上傳失敗詳情:", e);
-        showToast('❌ 備份失敗: ' + (e.message || "網路錯誤")); 
+      } catch (error) { 
+        console.error("上傳失敗詳情 (詳細物件):", error);
+        
+        let errorMsg = error.message || "";
+        if (errorMsg.includes("Failed to fetch")) errorMsg = "網路異常或 API 尚未啟用 (被 CORS 阻擋)";
+        else if (typeof error === 'object' && !errorMsg) {
+            try { errorMsg = JSON.stringify(error); } catch(err) {}
+        }
+        
+        showToast('❌ 備份失敗: ' + (errorMsg || "未知錯誤")); 
       }
     }
 
@@ -731,6 +743,12 @@
       const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
       try {
         const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        
+        if (!searchRes.ok) {
+            const errText = await searchRes.text();
+            throw new Error(`API 請求失敗 (${searchRes.status}): ${errText}`);
+        }
+        
         const searchData = await searchRes.json();
         
         if (searchData.error) throw new Error(searchData.error.message || "API 存取被拒");
@@ -739,14 +757,17 @@
           const fileId = searchData.files[0].id;
           const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
           
-          if (!contentRes.ok) throw new Error(`讀取失敗 (${contentRes.status})`);
+          if (!contentRes.ok) {
+              const errText = await contentRes.text();
+              throw new Error(`讀取備份內容失敗 (${contentRes.status}): ${errText}`);
+          }
           
           const text = await contentRes.text();
           if (!text) { showToast('目前備份檔為空'); return; }
           const cloudRecords = JSON.parse(text);
           
-          if (!Array.isArray(cloudRecords)) throw new Error('檔案格式不符');
-          if (!currentUser) throw new Error('Firebase 未連線');
+          if (!Array.isArray(cloudRecords)) throw new Error('檔案格式不符，請確認雲端硬碟的檔案內容');
+          if (!currentUser) throw new Error('Firebase 尚未連線，無法寫入資料庫');
 
           const localIds = new Set(records.map(r => r.id));
           const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
@@ -763,9 +784,20 @@
         } else {
           showToast('❌ 雲端硬碟中找不到備份檔');
         }
-      } catch (e) { 
-        console.error("下載失敗詳情:", e);
-        showToast('❌ 下載失敗: ' + (e.message || "發生未知錯誤")); 
+      } catch (error) { 
+        console.error("下載失敗詳情 (詳細物件):", error);
+        
+        // 嘗試解析錯誤訊息，讓畫面的 Toast 顯示更明白
+        let errorMsg = error.message || "";
+        if (errorMsg.includes("Failed to fetch")) {
+            errorMsg = "網路異常或 API 尚未啟用 (被 CORS 阻擋)";
+        } else if (errorMsg.includes("Unexpected token")) {
+            errorMsg = "回傳格式錯誤 (API 可能尚未完全生效)";
+        } else if (typeof error === 'object' && !errorMsg) {
+            try { errorMsg = JSON.stringify(error); } catch(err) {}
+        }
+        
+        showToast('❌ 下載失敗: ' + (errorMsg || "未知錯誤")); 
       }
     }
 
