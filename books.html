@@ -17,7 +17,7 @@
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
-  <!-- 認證登入/註冊畫面 (改為 Google 登入) -->
+  <!-- 認證登入/註冊畫面 (Google 登入) -->
   <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[90] flex flex-col items-center justify-center transition-opacity duration-300">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -199,10 +199,10 @@
     </nav>
   </div>
 
-  <!-- 使用 Type="module" 引入 Firebase SDK (改用 Redirect 相關模組) -->
+  <!-- 使用 Type="module" 引入 Firebase SDK (穩定的 Popup 模式) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // ==========================================
@@ -224,7 +224,7 @@
     
     let currentUser = null;
     let unsubscribeFirestore = null;
-    let isSigningIn = false;
+    let isSigningIn = false; // 防連點機制
 
     let records = [];
     const CATEGORIES = [
@@ -242,7 +242,7 @@
     let currentCategoryFilter = null;
 
     // ==========================================
-    // 🔒 認證與登入邏輯 (轉為 Redirect 模式)
+    // 🔒 認證與登入邏輯 (穩定的 Popup 模式)
     // ==========================================
     
     window.signInWithGoogle = async () => {
@@ -255,32 +255,24 @@
        
        errorEl.classList.add('opacity-0');
        btnEl.classList.add('opacity-50', 'pointer-events-none'); 
-       btnText.innerText = '準備導向 Google 登入...';
+       btnText.innerText = '登入中...';
        
        try {
            googleProvider.setCustomParameters({ prompt: 'select_account' });
-           await signInWithRedirect(auth, googleProvider);
+           // 使用 signInWithPopup 避免重新導向造成的跨站 Cookie 阻擋
+           await signInWithPopup(auth, googleProvider);
        } catch (error) {
-           console.error("導向登入錯誤:", error);
-           errorEl.innerText = `發生錯誤 (${error.code})。`;
-           errorEl.classList.remove('opacity-0');
+           console.error("登入錯誤:", error);
+           if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+               errorEl.innerText = `發生錯誤 (${error.code})。`;
+               errorEl.classList.remove('opacity-0');
+           }
+       } finally {
            isSigningIn = false;
            btnEl.classList.remove('opacity-50', 'pointer-events-none');
            btnText.innerText = '使用 Google 帳號登入';
        }
     };
-
-    // 接收 Redirect 回來的結果
-    getRedirectResult(auth).catch((error) => {
-        console.error("Redirect 登入返回錯誤:", error);
-        const errorEl = document.getElementById('auth-error');
-        if (error.code === 'auth/unauthorized-domain') {
-            errorEl.innerText = '此網址未被允許登入。請至 Firebase 控制台加入授權網域。';
-        } else {
-            errorEl.innerText = `登入發生錯誤 (${error.code})。`;
-        }
-        errorEl.classList.remove('opacity-0');
-    });
 
     window.handleLogout = async () => {
        await signOut(auth);
