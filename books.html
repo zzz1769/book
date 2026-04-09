@@ -17,7 +17,7 @@
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
-  <!-- 密碼鎖畫面 (可視需求移除，因為已有登入系統，但暫時保留) -->
+  <!-- 密碼鎖畫面 -->
   <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300 cursor-pointer" onclick="focusLockInput()">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform" onclick="event.stopPropagation();">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -49,7 +49,7 @@
       
       <button id="auth-submit-btn" onclick="signInWithGoogle()" class="w-full flex items-center justify-center py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-sm transition-all active:scale-[0.98] mb-4">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5 mr-3" alt="Google">
-        使用 Google 帳號登入
+        <span id="auth-btn-text">使用 Google 帳號登入</span>
       </button>
     </div>
   </div>
@@ -59,7 +59,6 @@
     <!-- 頂部 Header -->
     <header class="bg-white px-4 pt-10 pb-3 shadow-sm z-10 flex justify-between items-center shrink-0 h-16">
       <div class="text-base font-bold text-gray-800 tracking-wide">極簡記帳</div>
-      <!-- 狀態列改為顯示 Firebase 狀態 -->
       <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold shadow-sm" id="firebase-status">
         <i class="fas fa-spinner fa-spin"></i>
         <span>連線中...</span>
@@ -148,7 +147,6 @@
       <!-- 視圖 3: 設定與備份 -->
       <div id="view-settings" class="p-3 space-y-3 hidden">
         
-        <!-- Firebase 狀態區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50 flex justify-between items-center">
             <div>
@@ -159,7 +157,6 @@
           </div>
         </div>
 
-        <!-- Google Drive 備份區塊 (手動) -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div class="p-4 border-b border-gray-50 flex justify-between items-start">
             <div>
@@ -205,19 +202,14 @@
     </nav>
   </div>
 
-  <!-- 使用 Type="module" 引入 Firebase SDK -->
+  <!-- 使用 Type="module" 引入 Firebase SDK (改用 Redirect 相關模組) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // ==========================================
-    // 🔒 密碼鎖設定
-    // ==========================================
     const TARGET_HASH = 1625059299;
-    function generateHash(str) {
-      return str.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
-    }
+    function generateHash(str) { return str.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0); }
     window.focusLockInput = () => { const lockInput = document.getElementById('lock-password'); if (lockInput) lockInput.focus(); };
     window.checkPassword = () => {
       const input = document.getElementById('lock-password').value;
@@ -235,7 +227,7 @@
     };
 
     // ==========================================
-    // 🔥 Firebase 設定與初始化 (已移除環境判斷，純淨版本)
+    // 🔥 Firebase 設定與初始化
     // ==========================================
     const firebaseConfig = {
       apiKey: "AIzaSyDl3IYAAQGCwKLaSVGdY4ewZZlhVmu7dUg",
@@ -249,16 +241,12 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
-    
-    // 使用您的 Firebase Project ID 作為固定 appId
-    const appId = 'book-dad94'; 
     const googleProvider = new GoogleAuthProvider();
     
     let currentUser = null;
     let unsubscribeFirestore = null;
-    let isSigningIn = false; // 防連點鎖
+    let isSigningIn = false;
 
-    // 基礎參數
     let records = [];
     const CATEGORIES = [
       { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B' },
@@ -273,47 +261,48 @@
     let currentTab = 'add';
     let currentSearchQuery = '';
     let currentCategoryFilter = null;
-    let pieChartSlices = [];
 
     // ==========================================
-    // 🔒 認證與登入邏輯 (Google 登入)
+    // 🔒 認證與登入邏輯 (轉為 Redirect 模式)
     // ==========================================
     
     window.signInWithGoogle = async () => {
-       if (isSigningIn) return; // 如果正在登入中，直接忽略後續點擊 (防連點)
+       if (isSigningIn) return; 
        isSigningIn = true;
        
        const errorEl = document.getElementById('auth-error');
        const btnEl = document.getElementById('auth-submit-btn');
+       const btnText = document.getElementById('auth-btn-text');
        
        errorEl.classList.add('opacity-0');
-       btnEl.classList.add('opacity-50', 'pointer-events-none'); // 暫時讓按鈕變半透明且無法點擊
+       btnEl.classList.add('opacity-50', 'pointer-events-none'); 
+       btnText.innerText = '準備導向 Google 登入...';
        
        try {
-           // 加入參數，強制顯示帳號選擇，減少快取問題
            googleProvider.setCustomParameters({ prompt: 'select_account' });
-           await signInWithPopup(auth, googleProvider);
-           // 成功後 onAuthStateChanged 會自動處理 UI 變化
+           // 💡 關鍵修改：改用 signInWithRedirect 徹底解決 Popup 被阻擋的問題
+           await signInWithRedirect(auth, googleProvider);
        } catch (error) {
-           console.error("Google 登入錯誤:", error);
-           
-           if (error.code === 'auth/popup-closed-by-user') {
-               errorEl.innerText = '您關閉了登入視窗。';
-           } else if (error.code === 'auth/cancelled-popup-request') {
-               errorEl.innerText = '系統正在處理登入，請勿連續點擊按鈕。';
-           } else if (error.code === 'auth/unauthorized-domain') {
-               errorEl.innerText = '此網址未被允許登入。請在 Firebase 控制台的「Authentication」>「設定」>「授權網域」加入您的網址。';
-           } else if (error.code === 'auth/configuration-not-found') {
-               errorEl.innerText = '登入失敗。請檢查 Firebase 後台是否已將「專案支援電子郵件」設定完成。';
-           } else {
-               errorEl.innerText = `發生錯誤 (${error.code})。`;
-           }
+           console.error("導向登入錯誤:", error);
+           errorEl.innerText = `發生錯誤 (${error.code})。`;
            errorEl.classList.remove('opacity-0');
-       } finally {
-           isSigningIn = false; // 解除鎖定
+           isSigningIn = false;
            btnEl.classList.remove('opacity-50', 'pointer-events-none');
+           btnText.innerText = '使用 Google 帳號登入';
        }
     };
+
+    // 💡 接收 Redirect 回來的結果 (重要)
+    getRedirectResult(auth).catch((error) => {
+        console.error("Redirect 登入返回錯誤:", error);
+        const errorEl = document.getElementById('auth-error');
+        if (error.code === 'auth/unauthorized-domain') {
+            errorEl.innerText = '此網址未被允許登入。請至 Firebase 控制台加入授權網域。';
+        } else {
+            errorEl.innerText = `登入發生錯誤 (${error.code})。`;
+        }
+        errorEl.classList.remove('opacity-0');
+    });
 
     window.handleLogout = async () => {
        await signOut(auth);
@@ -330,7 +319,6 @@
         statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
         statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm";
         
-        // 登入成功，隱藏登入畫面
         authScreen.classList.add('opacity-0', 'pointer-events-none');
         setTimeout(() => { authScreen.style.display = 'none'; }, 300);
         
@@ -339,9 +327,8 @@
         statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>離線</span>';
         statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm";
         
-        // 未登入，顯示登入畫面並清空本地顯示資料
         authScreen.style.display = 'flex';
-        void authScreen.offsetWidth; // 強制重繪
+        void authScreen.offsetWidth; 
         authScreen.classList.remove('opacity-0', 'pointer-events-none');
         records = [];
         document.getElementById('history-list').innerHTML = '';
@@ -354,7 +341,6 @@
     function setupFirestoreListener() {
       if (!currentUser) return;
       
-      // 使用更標準且短的路徑： users/{uid}/expenses
       const expensesRef = collection(db, 'users', currentUser.uid, 'expenses');
       
       unsubscribeFirestore = onSnapshot(expensesRef, (snapshot) => {
@@ -424,7 +410,6 @@
       }
     };
 
-    // UI 切換邏輯
     window.switchTab = (tab) => {
       currentTab = tab;
       ['add', 'stats', 'settings'].forEach(t => document.getElementById(`view-${t}`).classList.add('hidden'));
@@ -459,7 +444,6 @@
       setTimeout(() => toast.classList.add('opacity-0'), 2000);
     }
     
-    // 初始化畫面
     function initUI() {
       if (sessionStorage.getItem('app_unlocked') !== 'true') setTimeout(() => { window.focusLockInput(); }, 100);
       document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
@@ -471,7 +455,6 @@
       window.selectCategory('food');
     }
     
-    // 統計畫面繪製 
     window.updateStatsView = function updateStatsView() {
       const selectedYear = document.getElementById('filter-year').value;
       const selectedMonth = document.getElementById('filter-month').value;
