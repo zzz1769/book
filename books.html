@@ -314,7 +314,7 @@
     let isSigningIn = false;
 
     // ==========================================
-    // 🗂️ 分類資料管理
+    // 🗂️ 穩定化資料變數宣告 (含防呆捕捉)
     // ==========================================
     const DEFAULT_CATEGORIES = [
       { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B', keywords: ['統一超商','全家','萊爾富','ＯＫ','麥當勞','肯德基','摩斯','星巴克','八方雲集','便當','麵','飲料','茶','餐廳','咖啡','食堂','烘焙','好市多','和德昌','三商','餐飲','購好康','爭鮮','壽司','飲店','牛乳大王','食品','家福','統一','鼎城小吃'] },
@@ -326,13 +326,35 @@
       { id: 'other', name: '其他', icon: 'fas fa-ellipsis-h', color: '#6B7280', keywords: [] }
     ];
 
-    let categories = JSON.parse(localStorage.getItem('my_categories')) || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+    let categories = [];
     let records = [];
-    let selectedCategoryId = categories[0].id;
+
+    // 強固的 LocalStorage 讀取，防止 JSON 損毀導致整個腳本崩潰卡死
+    try {
+        const savedCats = localStorage.getItem('my_categories');
+        if (savedCats) {
+            categories = JSON.parse(savedCats);
+            if (!Array.isArray(categories) || categories.length === 0) categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+        } else {
+            categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+        }
+    } catch (e) {
+        categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+    }
+
+    try {
+        const savedRecords = localStorage.getItem('my_expenses');
+        if (savedRecords) {
+            records = JSON.parse(savedRecords);
+            if (!Array.isArray(records)) records = [];
+        }
+    } catch (e) {
+        records = [];
+    }
+
+    let selectedCategoryId = categories[0]?.id || 'food';
     let currentTab = 'add';
     let cloudHasUpdate = false;
-
-    // 搜尋與篩選狀態
     let currentSearchQuery = '';
     let currentCategoryFilter = null;
     let pieChartSlices = [];
@@ -361,12 +383,8 @@
             document.getElementById('cat-keywords-input').value = (cat.keywords||[]).join(', ');
             selectedIconForCat = cat.icon;
             selectedColorForCat = cat.color;
-            
-            if(cat.id === 'other') {
-               document.getElementById('cat-delete-btn').classList.add('hidden');
-            } else {
-               document.getElementById('cat-delete-btn').classList.remove('hidden');
-            }
+            if(cat.id === 'other') document.getElementById('cat-delete-btn').classList.add('hidden');
+            else document.getElementById('cat-delete-btn').classList.remove('hidden');
         } else {
             document.getElementById('cat-modal-title').innerText = '新增分類';
             document.getElementById('cat-id-input').value = '';
@@ -376,7 +394,7 @@
             selectedColorForCat = AVAILABLE_COLORS[0];
             document.getElementById('cat-delete-btn').classList.add('hidden');
         }
-        renderCatModalPickers();
+        window.renderCatModalPickers();
     };
 
     window.closeCategoryModal = () => {
@@ -388,17 +406,14 @@
     };
 
     window.renderCatModalPickers = () => {
-       const iconHtml = AVAILABLE_ICONS.map(i => `
+       document.getElementById('cat-icon-picker').innerHTML = AVAILABLE_ICONS.map(i => `
          <button onclick="selectModalIcon('${i}')" class="w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${selectedIconForCat===i ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-transparent bg-gray-100 text-gray-500 hover:bg-gray-200'}">
             <i class="${i}"></i>
          </button>`).join('');
-       document.getElementById('cat-icon-picker').innerHTML = iconHtml;
-
-       const colorHtml = AVAILABLE_COLORS.map(c => `
+       document.getElementById('cat-color-picker').innerHTML = AVAILABLE_COLORS.map(c => `
          <button onclick="selectModalColor('${c}')" class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-transform ${selectedColorForCat===c ? 'border-gray-800 scale-110' : 'border-transparent hover:scale-110'}" style="background-color: ${c}">
             ${selectedColorForCat===c ? '<i class="fas fa-check text-white text-xs"></i>' : ''}
          </button>`).join('');
-       document.getElementById('cat-color-picker').innerHTML = colorHtml;
     };
 
     window.selectModalIcon = (icon) => { selectedIconForCat = icon; window.renderCatModalPickers(); };
@@ -408,10 +423,9 @@
         const idInput = document.getElementById('cat-id-input').value;
         const name = document.getElementById('cat-name-input').value.trim();
         const keywordsRaw = document.getElementById('cat-keywords-input').value;
-        
         if(!name) { window.showToast('請輸入分類名稱'); return; }
+        
         const keywords = keywordsRaw.split(',').map(k=>k.trim()).filter(k=>k);
-
         if (idInput) {
             const idx = categories.findIndex(c => c.id === idInput);
             if(idx !== -1) categories[idx] = { ...categories[idx], name, icon: selectedIconForCat, color: selectedColorForCat, keywords };
@@ -423,10 +437,9 @@
         localStorage.setItem('my_categories', JSON.stringify(categories));
         await syncCategoriesToCloud();
         
-        renderCategories();
-        renderSettingsCategories();
-        if(currentTab === 'stats') updateStatsView();
-        
+        window.renderCategories();
+        window.renderSettingsCategories();
+        if(currentTab === 'stats') window.updateStatsView();
         window.closeCategoryModal();
         window.showToast('✅ 分類儲存成功');
     };
@@ -450,54 +463,50 @@
             if (typeof window.executeDriveUpload === 'function') window.executeDriveUpload(true);
         }
 
-        renderCategories();
-        renderSettingsCategories();
-        if(currentTab === 'stats') updateStatsView();
-        
+        window.renderCategories();
+        window.renderSettingsCategories();
+        if(currentTab === 'stats') window.updateStatsView();
         window.closeCategoryModal();
         window.showToast('✅ 已刪除分類');
     };
 
     async function syncCategoriesToCloud() {
         if (currentUser) {
-            const catRef = doc(db, 'users', currentUser.uid, 'settings', 'categories');
-            await setDoc(catRef, { list: categories });
+            try {
+                const catRef = doc(db, 'users', currentUser.uid, 'settings', 'categories');
+                await setDoc(catRef, { list: categories });
+            } catch(e) { console.error("分類上傳失敗", e); }
         }
     }
 
-    function renderSettingsCategories() {
+    window.renderSettingsCategories = () => {
         const container = document.getElementById('settings-category-list');
         if(!container) return;
         container.innerHTML = categories.map(cat => `
           <div onclick="openCategoryModal('${cat.id}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 border border-transparent hover:border-blue-200 transition-colors">
             <div class="flex items-center space-x-3">
-               <div class="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0" style="background-color: ${cat.color}">
-                 <i class="${cat.icon} text-sm"></i>
-               </div>
+               <div class="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0" style="background-color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
                <div class="overflow-hidden">
                  <div class="text-sm font-bold text-gray-800">${cat.name}</div>
                  <div class="text-[10px] text-gray-500 w-48 truncate">${(cat.keywords||[]).join(', ') || '無設定關鍵字'}</div>
                </div>
-            </div>
-            <i class="fas fa-edit text-gray-400 text-xs shrink-0"></i>
-          </div>
-        `).join('');
-    }
+            </div><i class="fas fa-edit text-gray-400 text-xs shrink-0"></i>
+          </div>`).join('');
+    };
 
-    function renderCategories() {
+    window.renderCategories = () => {
         const container = document.getElementById('category-container');
         if(!container) return;
+        
+        if (!categories || categories.length === 0) categories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
         container.innerHTML = categories.map(cat => `
           <button onclick="selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}">
-            <div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280">
-              <i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600">${cat.name}</span>
+            <div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280"><i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600">${cat.name}</span>
           </button>`).join('');
         
-        if(!categories.find(c => c.id === selectedCategoryId)) {
-            selectedCategoryId = categories[0].id;
-        }
+        if(!categories.find(c => c.id === selectedCategoryId)) selectedCategoryId = categories[0]?.id || 'other';
         window.selectCategory(selectedCategoryId);
-    }
+    };
 
     // ==========================================
     // 🔒 認證與登入邏輯
@@ -516,7 +525,16 @@
        
        try {
            googleProvider.setCustomParameters({ prompt: 'select_account' });
-           await signInWithPopup(auth, googleProvider);
+           const result = await signInWithPopup(auth, googleProvider);
+           
+           // 強制：只要 Google 回傳登入成功，優先把遮罩關掉，避免卡死
+           if (result && result.user) {
+               const authScreen = document.getElementById('auth-screen');
+               if (authScreen) {
+                   authScreen.classList.add('opacity-0', 'pointer-events-none');
+                   setTimeout(() => { authScreen.style.display = 'none'; }, 300);
+               }
+           }
        } catch (error) {
            console.error("登入錯誤:", error);
            if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
@@ -536,58 +554,85 @@
     };
 
     onAuthStateChanged(auth, (user) => {
-      currentUser = user;
-      const statusEl = document.getElementById('firebase-status');
-      const authScreen = document.getElementById('auth-screen');
-      
-      if (user) {
-        statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
-        statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm";
-        authScreen.classList.add('opacity-0', 'pointer-events-none');
-        setTimeout(() => { authScreen.style.display = 'none'; }, 300);
-        setupFirestoreListener();
-      } else {
-        statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>離線</span>';
-        statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm";
-        authScreen.style.display = 'flex';
-        void authScreen.offsetWidth; 
-        authScreen.classList.remove('opacity-0', 'pointer-events-none');
-        records = [];
-        document.getElementById('history-list').innerHTML = '';
-        if (unsubscribeFirestore) unsubscribeFirestore();
-        if (unsubscribeCatFirestore) unsubscribeCatFirestore();
+      try {
+          currentUser = user;
+          const statusEl = document.getElementById('firebase-status');
+          const authScreen = document.getElementById('auth-screen');
+          
+          if (user) {
+            statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
+            statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm";
+            
+            // 雙重保險：確保畫面順利消失
+            if (authScreen) {
+                authScreen.classList.add('opacity-0', 'pointer-events-none');
+                setTimeout(() => { authScreen.style.display = 'none'; }, 300);
+            }
+            
+            setupFirestoreListener();
+          } else {
+            statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>離線</span>';
+            statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm";
+            
+            if (authScreen) {
+                authScreen.style.display = 'flex';
+                void authScreen.offsetWidth; 
+                authScreen.classList.remove('opacity-0', 'pointer-events-none');
+            }
+            
+            records = [];
+            document.getElementById('history-list').innerHTML = '';
+            if (unsubscribeFirestore) unsubscribeFirestore();
+            if (unsubscribeCatFirestore) unsubscribeCatFirestore();
+          }
+      } catch (err) {
+          console.error("狀態監聽發生未知錯誤:", err);
+          // 極端情況救援：若上述邏輯當機，依然強制解鎖畫面
+          if (user) {
+              const authScreen = document.getElementById('auth-screen');
+              if (authScreen) {
+                  authScreen.classList.add('opacity-0', 'pointer-events-none');
+                  setTimeout(() => { authScreen.style.display = 'none'; }, 300);
+              }
+          }
       }
     });
 
     function setupFirestoreListener() {
       if (!currentUser) return;
       
-      // 監聽記帳紀錄
       const expensesRef = collection(db, 'users', currentUser.uid, 'expenses');
       unsubscribeFirestore = onSnapshot(expensesRef, (snapshot) => {
-        const newRecords = [];
-        snapshot.forEach(doc => { newRecords.push(doc.data()); });
-        records = newRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
-        localStorage.setItem('my_expenses', JSON.stringify(records));
-        
-        initDateFilters();
-        if (currentTab === 'stats') updateStatsView();
-      }, (error) => { console.error("Firestore 紀錄同步錯誤", error); });
+        try {
+            const newRecords = [];
+            snapshot.forEach(doc => { 
+                const data = doc.data();
+                // 防呆：如果雲端資料壞掉缺少日期，強塞今日日期避免 Crash
+                if (!data.date) data.date = new Date().toISOString().split('T')[0];
+                newRecords.push(data); 
+            });
+            records = newRecords.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+            localStorage.setItem('my_expenses', JSON.stringify(records));
+            
+            initDateFilters();
+            if (currentTab === 'stats') window.updateStatsView();
+        } catch(e) { console.error("Firestore 紀錄同步錯誤", e); }
+      });
 
-      // 監聽自訂分類
       const catRef = doc(db, 'users', currentUser.uid, 'settings', 'categories');
       unsubscribeCatFirestore = onSnapshot(catRef, (docSnap) => {
-        if (docSnap.exists() && docSnap.data().list) {
-            categories = docSnap.data().list;
-            localStorage.setItem('my_categories', JSON.stringify(categories));
-            renderCategories();
-            renderSettingsCategories();
-            if (currentTab === 'stats') updateStatsView();
-        } else {
-            // 如果雲端尚未有分類資料，把本機資料寫上去
-            syncCategoriesToCloud();
-        }
-      }, (error) => { console.error("Firestore 分類同步錯誤", error); });
+        try {
+            if (docSnap.exists() && docSnap.data().list && Array.isArray(docSnap.data().list) && docSnap.data().list.length > 0) {
+                categories = docSnap.data().list;
+                localStorage.setItem('my_categories', JSON.stringify(categories));
+                window.renderCategories();
+                window.renderSettingsCategories();
+                if (currentTab === 'stats') window.updateStatsView();
+            } else {
+                syncCategoriesToCloud();
+            }
+        } catch(e) { console.error("Firestore 分類同步錯誤", e); }
+      });
     }
 
     // ==========================================
@@ -652,7 +697,7 @@
       document.querySelectorAll('nav button').forEach(b => { b.classList.remove('text-blue-600'); b.classList.add('text-gray-400'); });
       document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
       if(tab === 'stats') window.updateStatsView();
-      if(tab === 'settings') renderSettingsCategories();
+      if(tab === 'settings') window.renderSettingsCategories();
     };
 
     window.selectCategory = (id) => {
@@ -683,13 +728,15 @@
     };
     
     function initUI() {
-      const saved = localStorage.getItem('my_expenses');
-      if(saved) records = JSON.parse(saved);
-      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
-      renderCategories();
-      renderSettingsCategories();
-      initDateFilters(true);
-      initCanvasClickListener();
+      try {
+          document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+          window.renderCategories();
+          window.renderSettingsCategories();
+          initDateFilters(true);
+          initCanvasClickListener();
+      } catch (e) {
+          console.error("UI 初始化發生錯誤", e);
+      }
     }
 
     function initCanvasClickListener() {
@@ -713,121 +760,125 @@
       });
     }
 
-    // 統計與圖表渲染
+    // 防呆捕捉版本的統計與圖表渲染
     window.updateStatsView = function updateStatsView() {
-      const selectedYear = document.getElementById('filter-year').value;
-      const selectedMonth = document.getElementById('filter-month').value;
-      const monthSelect = document.getElementById('filter-month');
-      
-      if (selectedYear === 'all') { 
-        monthSelect.value = 'all'; monthSelect.disabled = true; monthSelect.classList.add('opacity-50', 'bg-gray-100'); 
-      } else { 
-        monthSelect.disabled = false; monthSelect.classList.remove('opacity-50', 'bg-gray-100'); 
-      }
-      
-      let filteredRecords = records; 
-      let titleText = '累積總支出';
-      
-      if (selectedYear !== 'all') {
-          if (selectedMonth !== 'all') { 
-            filteredRecords = filteredRecords.filter(r => r.date.startsWith(`${selectedYear}-${selectedMonth}`)); 
-            titleText = `${selectedYear}年 ${parseInt(selectedMonth)}月 總支出`; 
+      try {
+          const selectedYear = document.getElementById('filter-year').value;
+          const selectedMonth = document.getElementById('filter-month').value;
+          const monthSelect = document.getElementById('filter-month');
+          
+          if (selectedYear === 'all') { 
+            monthSelect.value = 'all'; monthSelect.disabled = true; monthSelect.classList.add('opacity-50', 'bg-gray-100'); 
           } else { 
-            filteredRecords = filteredRecords.filter(r => r.date.startsWith(selectedYear)); 
-            titleText = `${selectedYear}年 總支出`; 
+            monthSelect.disabled = false; monthSelect.classList.remove('opacity-50', 'bg-gray-100'); 
           }
-      }
-      
-      if (currentSearchQuery) {
-          filteredRecords = filteredRecords.filter(r => {
-             const catName = categories.find(c => c.id === r.cat)?.name || '';
-             return (r.note && r.note.toLowerCase().includes(currentSearchQuery)) || catName.includes(currentSearchQuery);
-          });
-      }
-
-      document.getElementById('stats-title-text').innerText = titleText;
-      let total = 0; let totalsByCat = {};
-      
-      filteredRecords.forEach(r => { total += r.amount; totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; });
-      document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
-      
-      const canvas = document.getElementById('pieChart'); 
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = Math.min(cx, cy); 
-      pieChartSlices = [];
-      
-      if(total === 0) {
-        ctx.fillStyle = '#f3f4f6'; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
-        document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
-      } else {
-        let startAngle = -0.5 * Math.PI; let breakdownArr = [];
-        
-        categories.forEach(cat => {
-          if(totalsByCat[cat.id]) {
-             const amount = totalsByCat[cat.id]; 
-             const sliceAngle = (amount / total) * 2 * Math.PI; 
-             const endAngle = startAngle + sliceAngle;
-             
-             ctx.fillStyle = cat.color; 
-             ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
-             
-             pieChartSlices.push({ id: cat.id, startAngle, endAngle }); 
-             startAngle = endAngle;
-             breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1) });
+          
+          let filteredRecords = records; 
+          let titleText = '累積總支出';
+          
+          if (selectedYear !== 'all') {
+              if (selectedMonth !== 'all') { 
+                filteredRecords = filteredRecords.filter(r => r.date && r.date.startsWith(`${selectedYear}-${selectedMonth}`)); 
+                titleText = `${selectedYear}年 ${parseInt(selectedMonth)}月 總支出`; 
+              } else { 
+                filteredRecords = filteredRecords.filter(r => r.date && r.date.startsWith(selectedYear)); 
+                titleText = `${selectedYear}年 總支出`; 
+              }
           }
-        });
-        
-        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
-        breakdownArr.sort((a,b) => b.amount - a.amount);
-        document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `
-          <div onclick="filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}">
-             <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div><span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span></div>
-             <div class="flex items-center space-x-2"><span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span><span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span></div>
-          </div>`).join('');
-      }
+          
+          if (currentSearchQuery) {
+              filteredRecords = filteredRecords.filter(r => {
+                 const catName = categories.find(c => c.id === r.cat)?.name || '';
+                 return (r.note && r.note.toLowerCase().includes(currentSearchQuery)) || catName.includes(currentSearchQuery);
+              });
+          }
 
-      let listRecords = currentCategoryFilter ? filteredRecords.filter(r => r.cat === currentCategoryFilter) : filteredRecords;
-      const listTitle = document.getElementById('history-list-title');
-      
-      if (currentSearchQuery || currentCategoryFilter) {
-          let catName = currentCategoryFilter ? categories.find(c => c.id === currentCategoryFilter)?.name : '';
-          listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${catName||''}</span>`;
-      } else {
-          listTitle.innerHTML = '區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊直接修改)</span>';
-      }
+          document.getElementById('stats-title-text').innerText = titleText;
+          let total = 0; let totalsByCat = {};
+          
+          filteredRecords.forEach(r => { total += r.amount; totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; });
+          document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
+          
+          const canvas = document.getElementById('pieChart'); 
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = Math.min(cx, cy); 
+          pieChartSlices = [];
+          
+          if(total === 0) {
+            ctx.fillStyle = '#f3f4f6'; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
+            document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
+          } else {
+            let startAngle = -0.5 * Math.PI; let breakdownArr = [];
+            
+            categories.forEach(cat => {
+              if(totalsByCat[cat.id]) {
+                 const amount = totalsByCat[cat.id]; 
+                 const sliceAngle = (amount / total) * 2 * Math.PI; 
+                 const endAngle = startAngle + sliceAngle;
+                 
+                 ctx.fillStyle = cat.color; 
+                 ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
+                 
+                 pieChartSlices.push({ id: cat.id, startAngle, endAngle }); 
+                 startAngle = endAngle;
+                 breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1) });
+              }
+            });
+            
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
+            breakdownArr.sort((a,b) => b.amount - a.amount);
+            document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `
+              <div onclick="filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}">
+                 <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div><span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span></div>
+                 <div class="flex items-center space-x-2"><span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span><span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span></div>
+              </div>`).join('');
+          }
 
-      const historyContainer = document.getElementById('history-list');
-      if(listRecords.length === 0) { 
-          historyContainer.innerHTML = '<div class="text-center py-6 text-gray-400 text-sm">此區間/條件下尚未有記帳紀錄</div>'; 
-      } else {
-         const catOptionsTemplate = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-         historyContainer.innerHTML = listRecords.map(r => {
-           const cat = categories.find(c => c.id === r.cat) || categories.find(c => c.id === 'other') || categories[0];
-           const currentCatOptions = catOptionsTemplate.replace(`value="${cat.id}"`, `value="${cat.id}" selected`);
-           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative">
-               <div class="flex items-center space-x-3 w-[65%]">
-                 <div class="relative shrink-0 cursor-pointer" title="更換分類">
-                   <select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select>
-                   <div class="p-3 rounded-full flex items-center justify-center transition-transform group-hover:scale-105" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
-                 </div>
-                 <div class="overflow-hidden flex-1">
-                   <div class="font-bold text-gray-800 text-sm flex items-center relative">
-                      <div class="relative cursor-pointer"><select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>
-                      ${r.id.startsWith('INV') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}
+          let listRecords = currentCategoryFilter ? filteredRecords.filter(r => r.cat === currentCategoryFilter) : filteredRecords;
+          const listTitle = document.getElementById('history-list-title');
+          
+          if (currentSearchQuery || currentCategoryFilter) {
+              let catName = currentCategoryFilter ? categories.find(c => c.id === currentCategoryFilter)?.name : '';
+              listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${catName||''}</span>`;
+          } else {
+              listTitle.innerHTML = '區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊直接修改)</span>';
+          }
+
+          const historyContainer = document.getElementById('history-list');
+          if(listRecords.length === 0) { 
+              historyContainer.innerHTML = '<div class="text-center py-6 text-gray-400 text-sm">此區間/條件下尚未有記帳紀錄</div>'; 
+          } else {
+             const catOptionsTemplate = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+             historyContainer.innerHTML = listRecords.map(r => {
+               const cat = categories.find(c => c.id === r.cat) || categories.find(c => c.id === 'other') || categories[0] || DEFAULT_CATEGORIES[6];
+               const currentCatOptions = catOptionsTemplate.replace(`value="${cat.id}"`, `value="${cat.id}" selected`);
+               return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative">
+                   <div class="flex items-center space-x-3 w-[65%]">
+                     <div class="relative shrink-0 cursor-pointer" title="更換分類">
+                       <select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select>
+                       <div class="p-3 rounded-full flex items-center justify-center transition-transform group-hover:scale-105" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
+                     </div>
+                     <div class="overflow-hidden flex-1">
+                       <div class="font-bold text-gray-800 text-sm flex items-center relative">
+                          <div class="relative cursor-pointer"><select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>
+                          ${r.id.startsWith('INV') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}
+                       </div>
+                       <div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">
+                         <input type="date" value="${r.date}" onchange="updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10">
+                         <span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10">
+                       </div>
+                     </div>
                    </div>
-                   <div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">
-                     <input type="date" value="${r.date}" onchange="updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10">
-                     <span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10">
+                   <div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold text-gray-800 text-sm">$</span>
+                     <input type="number" value="${r.amount}" onchange="updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold text-gray-800 transition-colors relative z-10" inputmode="numeric">
+                     <button onclick="deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button>
                    </div>
-                 </div>
-               </div>
-               <div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold text-gray-800 text-sm">$</span>
-                 <input type="number" value="${r.amount}" onchange="updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold text-gray-800 transition-colors relative z-10" inputmode="numeric">
-                 <button onclick="deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button>
-               </div>
-             </div>`;
-         }).join('');
+                 </div>`;
+             }).join('');
+          }
+      } catch (err) {
+          console.error("更新統計視圖發生錯誤", err);
       }
     };
 
@@ -837,14 +888,33 @@
       if (currentCategoryFilter === catId) window.clearCategoryFilter();
       else { currentCategoryFilter = catId; document.getElementById('btn-clear-filter').classList.remove('hidden'); window.updateStatsView(); }
     };
+    
     function initDateFilters(isFirstLoad = false) {
-      const yearSelect = document.getElementById('filter-year'); const monthSelect = document.getElementById('filter-month');
-      const currentSelectedYear = yearSelect.value; const years = new Set(records.map(r => r.date.split('-')[0]));
-      const currentYear = new Date().getFullYear().toString(); years.add(currentYear);
-      const sortedYears = Array.from(years).sort((a, b) => b - a);
-      yearSelect.innerHTML = '<option value="all">全部年份</option>' + sortedYears.map(y => `<option value="${y}">${y}年</option>`).join('');
-      if (!isFirstLoad && currentSelectedYear && sortedYears.includes(currentSelectedYear)) yearSelect.value = currentSelectedYear;
-      else if (isFirstLoad || !currentSelectedYear) { yearSelect.value = currentYear; monthSelect.value = String(new Date().getMonth() + 1).padStart(2, '0'); }
+      try {
+          const yearSelect = document.getElementById('filter-year'); 
+          const monthSelect = document.getElementById('filter-month');
+          const currentSelectedYear = yearSelect.value; 
+          
+          // 安全提取年份，過濾壞資料
+          const years = new Set();
+          records.forEach(r => {
+             if (r && r.date) {
+                 const y = r.date.split('-')[0];
+                 if (y) years.add(y);
+             } 
+          });
+          
+          const currentYear = new Date().getFullYear().toString(); 
+          years.add(currentYear);
+          const sortedYears = Array.from(years).sort((a, b) => b - a);
+          
+          yearSelect.innerHTML = '<option value="all">全部年份</option>' + sortedYears.map(y => `<option value="${y}">${y}年</option>`).join('');
+          
+          if (!isFirstLoad && currentSelectedYear && sortedYears.includes(currentSelectedYear)) yearSelect.value = currentSelectedYear;
+          else if (isFirstLoad || !currentSelectedYear) { yearSelect.value = currentYear; monthSelect.value = String(new Date().getMonth() + 1).padStart(2, '0'); }
+      } catch (e) {
+          console.error("日期篩選器初始化錯誤", e);
+      }
     }
 
     // ==========================================
@@ -990,7 +1060,6 @@
           const imported = JSON.parse(e.target.result);
           let newRecords = [];
           
-          // 相容舊版本的 Array 格式，或新版本的 Object 格式
           if(Array.isArray(imported)) {
             newRecords = imported;
           } else if (imported.records) {
@@ -999,8 +1068,8 @@
                categories = imported.categories;
                localStorage.setItem('my_categories', JSON.stringify(categories));
                await syncCategoriesToCloud();
-               renderCategories();
-               renderSettingsCategories();
+               window.renderCategories();
+               window.renderSettingsCategories();
             }
           } else {
             throw new Error('Format unknown');
@@ -1023,111 +1092,6 @@
       };
       reader.readAsText(file);
     };
-
-    // Google Drive 相關代碼保持不變
-    const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
-    let tokenClient;
-    const SYNC_FILE_NAME = '極簡記帳備份_AutoSync.json';
-
-    window.initGoogleClient = () => {
-      if (typeof google === 'undefined' || !google.accounts) return;
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/drive.file',
-        callback: async (tokenResponse) => {
-          if (tokenResponse && tokenResponse.access_token) {
-             const action = localStorage.getItem('pending_drive_action');
-             if(action === 'upload') await performDriveUpload(tokenResponse.access_token);
-             else if(action === 'download') await performDriveDownload(tokenResponse.access_token);
-          }
-        }
-      });
-    };
-
-    const checkGoogleLoaded = setInterval(() => {
-      if (typeof google !== 'undefined' && google.accounts) {
-        window.initGoogleClient();
-        clearInterval(checkGoogleLoaded);
-      }
-    }, 300);
-
-    window.executeDriveUpload = () => {
-      if (!tokenClient) { return; }
-      localStorage.setItem('pending_drive_action', 'upload');
-      tokenClient.requestAccessToken({ prompt: 'select_account' });
-    };
-
-    window.syncFromDriveManual = () => {
-      if (!tokenClient) { window.showToast("正在載入服務，請稍後"); return; }
-      localStorage.setItem('pending_drive_action', 'download');
-      tokenClient.requestAccessToken({ prompt: 'select_account' });
-    };
-
-    async function performDriveUpload(accessToken) {
-      window.showToast('⏳ 正在上傳至 Google Drive...');
-      const fileContent = JSON.stringify(records);
-      let fileId = localStorage.getItem('drive_file_id');
-      const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
-      
-      try {
-        if (!fileId) {
-          const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-          if (!searchRes.ok) throw new Error(`API 請求失敗`);
-          const searchData = await searchRes.json();
-          if (searchData.error) throw new Error(searchData.error.message);
-          if (searchData.files && searchData.files.length > 0) fileId = searchData.files[0].id;
-        }
-
-        let response;
-        if (fileId) {
-           response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: fileContent });
-        } else {
-          const form = new FormData();
-          form.append('metadata', new Blob([JSON.stringify({ name: SYNC_FILE_NAME, mimeType: 'application/json' })], { type: 'application/json' }));
-          form.append('file', new Blob([fileContent], { type: 'application/json' }));
-          response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}` }, body: form });
-        }
-
-        if (response.ok) {
-           const data = await response.json(); localStorage.setItem('drive_file_id', data.id || fileId);
-           window.showToast('✅ 成功備份至 Google Drive！');
-        } else { throw new Error(`寫入失敗`); }
-      } catch (error) { window.showToast('❌ 備份失敗'); }
-    }
-
-    async function performDriveDownload(accessToken) {
-      window.showToast('⏳ 正在從 Google Drive 讀取...');
-      const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
-      try {
-        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-        if (!searchRes.ok) throw new Error(`API 請求失敗`);
-        const searchData = await searchRes.json();
-        if (searchData.error) throw new Error(searchData.error.message);
-        
-        if (searchData.files && searchData.files.length > 0) {
-          const fileId = searchData.files[0].id;
-          const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-          
-          if (!contentRes.ok) throw new Error(`讀取備份失敗`);
-          const text = await contentRes.text();
-          if (!text) { window.showToast('目前備份檔為空'); return; }
-          const cloudRecords = JSON.parse(text);
-          if (!Array.isArray(cloudRecords)) throw new Error('檔案格式不符');
-          if (!currentUser) throw new Error('Firebase 尚未連線');
-
-          const localIds = new Set(records.map(r => r.id));
-          const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
-          
-          if (newFromCloud.length > 0) {
-            for (const record of newFromCloud) {
-              const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
-              await setDoc(docRef, record);
-            }
-            window.showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料`);
-          } else { window.showToast('目前資料已是最新狀態'); }
-        } else { window.showToast('❌ 雲端硬碟中找不到備份檔'); }
-      } catch (error) { window.showToast('❌ 下載失敗'); }
-    }
 
     // 啟動初始化
     initUI();
