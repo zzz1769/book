@@ -217,7 +217,7 @@
           <div class="p-4 border-b border-gray-50 flex justify-between items-start">
             <div>
               <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
-              <p class="text-xs text-gray-500 mt-1">除了 Firebase 即時同步，您也可以手動備份至 Google Drive 或下載檔案。</p>
+              <p class="text-xs text-gray-500 mt-1">Firebase 已經為您切換至低耗能即時同步。您也可以額外備份至 Google Drive 或下載。</p>
             </div>
             <i class="fas fa-database text-blue-500 text-xl mt-1"></i>
           </div>
@@ -445,6 +445,7 @@
 
         if (recordsChanged) {
             localStorage.setItem('my_expenses', JSON.stringify(records));
+            await syncExpensesToCloud();
         }
 
         window.renderCategories();
@@ -460,6 +461,16 @@
                 const catRef = doc(db, 'users', currentUser.uid, 'settings', 'categories');
                 await setDoc(catRef, { list: categories });
             } catch(e) { console.error("分類上傳失敗", e); }
+        }
+    }
+
+    // 將所有紀錄打包成一個陣列統一上傳，大幅降低 Firebase 讀寫次數
+    async function syncExpensesToCloud() {
+        if (currentUser) {
+            try {
+                const expRef = doc(db, 'users', currentUser.uid, 'sync', 'expenses');
+                await setDoc(expRef, { list: records });
+            } catch(e) { console.error("紀錄上傳失敗", e); }
         }
     }
 
@@ -590,20 +601,19 @@
     function setupFirestoreListener() {
       if (!currentUser) return;
       
-      const expensesRef = collection(db, 'users', currentUser.uid, 'expenses');
-      unsubscribeFirestore = onSnapshot(expensesRef, (snapshot) => {
+      // 改為監聽「單一文件」(包含整個 list 陣列)，而非一整個集合 (Collection)
+      const expensesRef = doc(db, 'users', currentUser.uid, 'sync', 'expenses');
+      unsubscribeFirestore = onSnapshot(expensesRef, (docSnap) => {
         try {
-            const newRecords = [];
-            snapshot.forEach(doc => { 
-                const data = doc.data();
-                if (!data.date) data.date = new Date().toISOString().split('T')[0];
-                newRecords.push(data); 
-            });
-            records = newRecords.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-            localStorage.setItem('my_expenses', JSON.stringify(records));
-            
-            initDateFilters();
-            if (currentTab === 'stats') window.updateStatsView();
+            if (docSnap.exists() && docSnap.data().list) {
+                const newRecords = docSnap.data().list;
+                newRecords.forEach(r => { if (!r.date) r.date = new Date().toISOString().split('T')[0]; });
+                records = newRecords.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+                localStorage.setItem('my_expenses', JSON.stringify(records));
+                
+                initDateFilters();
+                if (currentTab === 'stats') window.updateStatsView();
+            }
         } catch(e) { console.error("Firestore 紀錄同步錯誤", e); }
       });
 
@@ -636,44 +646,52 @@
         date: document.getElementById('input-date').value, note: document.getElementById('input-note').value.trim() 
       };
       
-      if (currentUser) {
-        const docRef = doc(db, 'users', currentUser.uid, 'expenses', newRecord.id);
-        await setDoc(docRef, newRecord);
-      }
+      records.push(newRecord);
+      records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      localStorage.setItem('my_expenses', JSON.stringify(records));
+      
+      // 更新雲端 (單一檔案更新)
+      await syncExpensesToCloud();
+      
       amountInput.value = ''; document.getElementById('input-note').value = '';
       window.showToast('✅ 記帳成功！');
     };
 
     window.deleteRecord = async (id) => {
       if(confirm('確定要刪除這筆紀錄嗎？') && currentUser) {
-        const docRef = doc(db, 'users', currentUser.uid, 'expenses', id);
-        await deleteDoc(docRef);
+        records = records.filter(r => r.id !== id);
+        localStorage.setItem('my_expenses', JSON.stringify(records));
+        
+        await syncExpensesToCloud();
         window.showToast('已刪除紀錄');
       }
     };
 
     window.updateRecordField = async (id, field, value) => {
       if (!currentUser) return;
-      const record = records.find(r => r.id === id);
-      if (!record) return;
+      const index = records.findIndex(r => r.id === id);
+      if (index === -1) return;
 
       if (field === 'amount') {
           value = Number(value);
           if (!value || value <= 0) { window.showToast('無效金額'); window.updateStatsView(); return; }
       } else if (field === 'note') value = value.trim();
 
-      const updatedRecord = { ...record, [field]: value };
-      const docRef = doc(db, 'users', currentUser.uid, 'expenses', id);
-      await setDoc(docRef, updatedRecord, { merge: true });
+      records[index][field] = value;
+      if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      localStorage.setItem('my_expenses', JSON.stringify(records));
+      await syncExpensesToCloud();
+      
+      window.updateStatsView();
       window.showToast('✅ 紀錄已自動儲存');
     };
 
     window.clearAllData = async () => {
       if(confirm('警告：這將會刪除所有資料，確定要繼續嗎？') && currentUser) {
-        for (const record of records) {
-          const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
-          await deleteDoc(docRef);
-        }
+        records = [];
+        localStorage.setItem('my_expenses', JSON.stringify(records));
+        await syncExpensesToCloud();
         window.showToast('已清空所有資料');
       }
     };
@@ -997,7 +1015,6 @@
              }
           }
 
-          const newLocalRecords = [];
           invoiceMap.forEach((data, invoiceNum) => {
               let formattedDate = new Date().toISOString().split('T')[0];
               if(data.dateRaw.length === 8 && !data.dateRaw.includes('/')) {
@@ -1014,7 +1031,7 @@
                  let itemStr = data.items.slice(0, 2).join('、');
                  if(data.items.length > 2) itemStr += '...';
 
-                 newLocalRecords.push({
+                 records.push({
                    id: recordId, amount: data.amount, cat: category, date: formattedDate,
                    note: `${data.shopName}${itemStr ? ` (${itemStr})` : ''}`
                  });
@@ -1022,15 +1039,13 @@
               } else { skipCount++; }
           });
 
-          if(newRecordsCount > 0 && currentUser) {
-            window.showToast('⏳ 正在同步匯入至雲端...');
-            for (const record of newLocalRecords) {
-                const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
-                await setDoc(docRef, record);
-            }
+          if(newRecordsCount > 0) {
+            records.sort((a, b) => new Date(b.date) - new Date(a.date));
+            localStorage.setItem('my_expenses', JSON.stringify(records));
+            await syncExpensesToCloud();
+            initDateFilters();
+            if(currentTab === 'stats') window.updateStatsView();
             window.showToast(`✅ 成功匯入 ${newRecordsCount} 張發票 (略過 ${skipCount} 張重複)`);
-          } else if(newRecordsCount > 0 && !currentUser) {
-            window.showToast('⚠️ 請先登入才能匯入發票');
           } else {
             window.showToast(`⚠️ 沒有找到新發票 (略過 ${skipCount} 張重複)`);
           }
@@ -1156,30 +1171,20 @@
 
           if (!Array.isArray(cloudRecords)) throw new Error('檔案格式不符');
           
-          if (!currentUser) {
-              const localIds = new Set(records.map(r => r.id));
-              const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
-              if(newFromCloud.length > 0) {
-                  records = [...records, ...newFromCloud];
-                  records.sort((a,b) => new Date(b.date) - new Date(a.date));
-                  localStorage.setItem('my_expenses', JSON.stringify(records));
-                  window.showToast(`✅ 已合併 ${newFromCloud.length} 筆資料`);
-                  if(currentTab === 'stats') window.updateStatsView();
-              } else {
-                  window.showToast('本地端資料已是最新');
-              }
-          } else {
-              const localIds = new Set(records.map(r => r.id));
-              const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
+          const localIds = new Set(records.map(r => r.id));
+          const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
+          if(newFromCloud.length > 0) {
+              records = [...records, ...newFromCloud];
+              records.sort((a,b) => new Date(b.date) - new Date(a.date));
+              localStorage.setItem('my_expenses', JSON.stringify(records));
               
-              if (newFromCloud.length > 0) {
-                window.showToast('⏳ 正在同步至 Firebase 資料庫...');
-                for (const record of newFromCloud) {
-                  const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
-                  await setDoc(docRef, record);
-                }
-                window.showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料`);
-              } else { window.showToast('目前資料已是最新狀態'); }
+              // 合併完畢後，直接上傳一次 Firebase
+              await syncExpensesToCloud();
+              
+              window.showToast(`✅ 已合併 ${newFromCloud.length} 筆資料`);
+              if(currentTab === 'stats') window.updateStatsView();
+          } else {
+              window.showToast('本地端資料已是最新');
           }
         } else { window.showToast('❌ 雲端硬碟中找不到備份檔'); }
       } catch (error) { window.showToast('❌ 下載失敗'); }
@@ -1222,15 +1227,20 @@
             throw new Error('Format unknown');
           }
           
-          if(newRecords.length > 0 && currentUser) {
-             window.showToast('⏳ 正在上傳至雲端資料庫...');
-             for(const rec of newRecords) {
-                const docRef = doc(db, 'users', currentUser.uid, 'expenses', rec.id);
-                await setDoc(docRef, rec);
+          if(newRecords.length > 0) {
+             records = newRecords;
+             records.sort((a,b) => new Date(b.date) - new Date(a.date));
+             localStorage.setItem('my_expenses', JSON.stringify(records));
+             
+             if (currentUser) {
+                 window.showToast('⏳ 正在上傳至雲端資料庫...');
+                 await syncExpensesToCloud();
+                 window.showToast('✅ 資料還原與上傳成功');
+             } else {
+                 window.showToast('✅ 本地資料還原成功');
              }
-             window.showToast('✅ 資料還原與上傳成功');
-          } else if(!currentUser) {
-             window.showToast('⚠️ 請先登入 Google 帳號才能還原資料');
+             if(currentTab === 'stats') window.updateStatsView();
+             initDateFilters();
           }
         } catch(err) { 
           window.showToast('❌ 無法解析備份檔案格式'); 
