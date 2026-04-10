@@ -9,6 +9,18 @@
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    @keyframes pulse-red {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .update-dot {
+      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
+      position: absolute; top: -2px; right: -2px;
+      animation: pulse-red 2s infinite;
+    }
+    
     input[type="date"]::-webkit-calendar-picker-indicator {
       background: transparent; bottom: 0; color: transparent; cursor: pointer;
       height: auto; left: 0; position: absolute; right: 0; top: 0; width: auto;
@@ -17,7 +29,7 @@
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
-  <!-- 認證登入/註冊畫面 (Google 登入) -->
+  <!-- ================= 認證登入畫面 ================= -->
   <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[90] flex flex-col items-center justify-center transition-opacity duration-300">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -35,14 +47,61 @@
     </div>
   </div>
 
+  <!-- ================= 分類管理彈出視窗 (Modal) ================= -->
+  <div id="category-modal" class="fixed inset-0 bg-gray-900/80 z-[110] flex flex-col items-center justify-end md:justify-center transition-opacity duration-300 opacity-0 pointer-events-none">
+    <div class="bg-white rounded-t-[2rem] md:rounded-[2rem] w-full max-w-[400px] p-6 pb-10 shadow-2xl transform transition-transform translate-y-full md:translate-y-0 h-[85vh] flex flex-col">
+      <div class="flex justify-between items-center mb-4 shrink-0">
+        <h3 id="cat-modal-title" class="text-lg font-bold text-gray-800">新增分類</h3>
+        <button onclick="closeCategoryModal()" class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <div class="flex-1 overflow-y-auto no-scrollbar space-y-4 pr-1">
+        <input type="hidden" id="cat-id-input">
+        
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">分類名稱</label>
+          <input type="text" id="cat-name-input" placeholder="例如：寵物、醫療..." class="w-full p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">選擇圖示</label>
+          <div id="cat-icon-picker" class="grid grid-cols-6 gap-2"></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">選擇顏色</label>
+          <div id="cat-color-picker" class="grid grid-cols-5 gap-2"></div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">自動歸類關鍵字 (以逗號分隔)</label>
+          <textarea id="cat-keywords-input" rows="3" placeholder="例如：動物醫院,寵物公園,肉泥..." class="w-full p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 resize-none"></textarea>
+          <p class="text-[10px] text-gray-400 mt-1">匯入發票時，若店家名稱包含上述任一關鍵字，會自動歸入此分類。</p>
+        </div>
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-gray-100 flex space-x-3 shrink-0">
+         <button id="cat-delete-btn" onclick="deleteCurrentCategory()" class="hidden px-4 py-3 bg-red-50 text-red-600 font-bold rounded-xl active:scale-95 transition-all"><i class="fas fa-trash"></i></button>
+         <button onclick="saveCategory()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
+           儲存分類
+         </button>
+      </div>
+    </div>
+  </div>
+
   <div class="w-full max-w-[400px] h-full md:h-[800px] bg-gray-50 md:rounded-[3rem] md:shadow-2xl relative overflow-hidden flex flex-col md:border-[8px] border-gray-900">
     
     <!-- 頂部 Header -->
     <header class="bg-white px-4 pt-10 pb-3 shadow-sm z-10 flex justify-between items-center shrink-0 h-16">
       <div class="text-base font-bold text-gray-800 tracking-wide">極簡記帳</div>
-      <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold shadow-sm" id="firebase-status">
-        <i class="fas fa-spinner fa-spin"></i>
-        <span>連線中...</span>
+      <div class="relative">
+        <button id="btn-cloud-sync" onclick="handleCloudButtonClick()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold shadow-sm transition-all active:scale-95 border border-gray-200">
+          <i id="cloud-icon" class="fas fa-cloud"></i>
+          <span id="cloud-sync-text">未連線</span>
+        </button>
+        <div id="cloud-update-dot" class="update-dot hidden"></div>
       </div>
     </header>
 
@@ -53,7 +112,7 @@
 
     <main class="flex-1 overflow-y-auto no-scrollbar relative flex flex-col">
       
-      <!-- 視圖 1: 新增記帳 -->
+      <!-- ================= 視圖 1: 新增記帳 ================= -->
       <div id="view-add" class="p-3 space-y-3 flex-1 flex flex-col justify-center">
         <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
           <label class="block text-xs font-medium text-gray-500 mb-1">消費金額</label>
@@ -64,7 +123,9 @@
         </div>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-2">選擇分類</label>
-          <div id="category-container" class="grid grid-cols-4 gap-2"></div>
+          <div id="category-container" class="grid grid-cols-4 gap-2">
+            <!-- JS 動態生成按鈕 -->
+          </div>
         </div>
         <div class="space-y-2">
           <div>
@@ -81,11 +142,11 @@
         </button>
       </div>
 
-      <!-- 視圖 2: 統計分析 -->
+      <!-- ================= 視圖 2: 統計分析 ================= -->
       <div id="view-stats" class="p-3 space-y-3 hidden">
         <div class="flex space-x-2">
-          <select id="filter-year" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm appearance-none text-center"></select>
-          <select id="filter-month" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm appearance-none text-center">
+          <select id="filter-year" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center"></select>
+          <select id="filter-month" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center">
             <option value="all">全年</option>
             <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
             <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
@@ -96,9 +157,9 @@
         <div class="flex space-x-2">
           <div class="relative flex-1">
             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
-            <input type="text" id="input-search" placeholder="搜尋備註與分類..." oninput="handleSearch()" class="w-full pl-9 p-2.5 text-sm font-medium bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 shadow-sm">
+            <input type="text" id="input-search" placeholder="搜尋備註與分類..." oninput="handleSearch()" class="w-full pl-9 p-2.5 text-sm font-medium bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors shadow-sm">
           </div>
-          <button id="btn-clear-filter" onclick="clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 shadow-sm whitespace-nowrap active:scale-95">
+          <button id="btn-clear-filter" onclick="clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm whitespace-nowrap active:scale-95">
             清除篩選
           </button>
         </div>
@@ -109,7 +170,7 @@
         </div>
 
         <div id="stats-card" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
-          <h3 class="w-full text-left text-sm font-bold text-gray-800 mb-2">支出結構</h3>
+          <h3 class="w-full text-left text-sm font-bold text-gray-800 mb-2">支出結構 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊圖表可篩選)</span></h3>
           <div class="relative flex items-center justify-center h-32 w-32">
             <canvas id="pieChart" width="128" height="128" class="cursor-pointer transition-transform hover:scale-105"></canvas>
             <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -120,33 +181,41 @@
         </div>
 
         <div>
-          <h3 id="history-list-title" class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄</h3>
+          <h3 id="history-list-title" class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊文字可直接修改)</span></h3>
           <div id="history-list" class="space-y-2 pb-4"></div>
         </div>
       </div>
 
-      <!-- 視圖 3: 設定與備份 -->
+      <!-- ================= 視圖 3: 設定與備份 ================= -->
       <div id="view-settings" class="p-3 space-y-3 hidden">
-        
+
+        <!-- 自訂分類管理區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50 flex justify-between items-center">
             <div>
-              <h2 class="text-lg font-bold text-gray-800">資料庫連線 (Firebase)</h2>
-              <p class="text-xs text-gray-500 mt-1">即時同步中，變更會自動儲存至雲端。</p>
+              <h2 class="text-lg font-bold text-gray-800">分類與發票關鍵字</h2>
+              <p class="text-xs text-gray-500 mt-1">管理分類並設定發票自動歸類規則。</p>
             </div>
-            <i class="fas fa-database text-blue-500 text-xl"></i>
+            <button onclick="openCategoryModal()" class="shrink-0 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm">
+              <i class="fas fa-plus"></i> 新增
+            </button>
+          </div>
+          <div class="p-4">
+            <div id="settings-category-list" class="space-y-2 max-h-60 overflow-y-auto no-scrollbar">
+              <!-- JS 動態生成自訂分類列表 -->
+            </div>
           </div>
         </div>
-
+        
         <!-- 雲端發票匯入區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50">
             <h2 class="text-lg font-bold text-gray-800">雲端發票整合</h2>
-            <p class="text-xs text-gray-500 mt-1">請至財政部電子發票平台下載「發票明細表(CSV)」並在此匯入，系統會自動歸類與過濾重複資料。</p>
+            <p class="text-xs text-gray-500 mt-1">匯入財政部「發票明細表(CSV)」，系統將依據您設定的關鍵字自動歸類。</p>
           </div>
           <div class="p-4">
             <div class="relative">
-              <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+              <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
               <button class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-bold shadow-sm pointer-events-none">
                 <i class="fas fa-file-invoice mr-2"></i> 匯入財政部發票 CSV
               </button>
@@ -154,23 +223,40 @@
           </div>
         </div>
 
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50 flex justify-between items-start">
             <div>
-              <h2 class="text-lg font-bold text-gray-800">Google Drive 手動備份</h2>
-              <p class="text-xs text-gray-500 mt-1">您可以隨時將所有紀錄打包備份到雲端硬碟。</p>
+              <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
+              <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測並「合併」本地與雲端的紀錄。</p>
+              <p id="sync-status-label" class="text-[10px] text-gray-400 mt-1 italic">尚未連線同步</p>
             </div>
+            <button onclick="connectDrive()" class="ml-2 shrink-0 px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm">
+              切換帳號
+            </button>
           </div>
           <div class="p-4 space-y-3">
-            <button onclick="executeDriveUpload()" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
-              <i class="fab fa-google-drive mr-2"></i> 備份資料至 Google Drive
-            </button>
+            
             <button onclick="syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
-              <i class="fas fa-cloud-download-alt mr-2"></i> 從 Drive 還原資料
+              <i class="fas fa-sync mr-2"></i> 從雲端下載並合併資料
             </button>
+
+            <button onclick="executeDriveUpload(false)" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
+              <i class="fab fa-google-drive mr-2"></i> 手動強制同步(上傳)至雲端
+            </button>
+
+            <button onclick="exportData()" class="w-full flex items-center justify-center py-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium">
+              <i class="fas fa-download mr-2"></i> 直接下載備份檔 (JSON)
+            </button>
+
+            <div class="relative">
+              <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+              <button class="w-full flex items-center justify-center py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-medium border border-gray-200 pointer-events-none">
+                <i class="fas fa-upload mr-2"></i> 從 JSON 檔案還原
+              </button>
+            </div>
           </div>
         </div>
-
+        
         <div class="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden mt-4">
            <div class="p-4 space-y-3">
              <button onclick="handleLogout()" class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-medium">
@@ -199,7 +285,7 @@
     </nav>
   </div>
 
-  <!-- 使用 Type="module" 引入 Firebase SDK (穩定的 Popup 模式) -->
+  <!-- JavaScript 邏輯區 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -224,23 +310,194 @@
     
     let currentUser = null;
     let unsubscribeFirestore = null;
+    let unsubscribeCatFirestore = null;
     let isSigningIn = false;
 
-    let records = [];
-    const CATEGORIES = [
-      { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B' },
-      { id: 'clothes', name: '服飾', icon: 'fas fa-tshirt', color: '#EC4899' },
-      { id: 'housing', name: '居住', icon: 'fas fa-home', color: '#8B5CF6' },
-      { id: 'transport', name: '交通', icon: 'fas fa-car', color: '#3B82F6' },
-      { id: 'education', name: '學習', icon: 'fas fa-book', color: '#10B981' },
-      { id: 'entertainment', name: '娛樂', icon: 'fas fa-gamepad', color: '#EF4444' },
-      { id: 'other', name: '其他', icon: 'fas fa-ellipsis-h', color: '#6B7280' }
+    // ==========================================
+    // 🗂️ 分類資料管理
+    // ==========================================
+    const DEFAULT_CATEGORIES = [
+      { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B', keywords: ['統一超商','全家','萊爾富','ＯＫ','麥當勞','肯德基','摩斯','星巴克','八方雲集','便當','麵','飲料','茶','餐廳','咖啡','食堂','烘焙','好市多','和德昌','三商','餐飲','購好康','爭鮮','壽司','飲店','牛乳大王','食品','家福','統一','鼎城小吃'] },
+      { id: 'clothes', name: '服飾', icon: 'fas fa-tshirt', color: '#EC4899', keywords: ['uniqlo','net','服飾','鞋','包','百貨','年青人眼鏡'] },
+      { id: 'housing', name: '居住', icon: 'fas fa-home', color: '#8B5CF6', keywords: ['全聯','大潤發','家樂福','愛買','寶雅','屈臣氏','康是美','五金','水電','瓦斯','電信','電力','水費','特力屋','土地開發基金','小米','富邦媒體','宜家家居','自來水','金興發'] },
+      { id: 'transport', name: '交通', icon: 'fas fa-car', color: '#3B82F6', keywords: ['中油','台塑','加油','停車','台鐵','高鐵','捷運','客運','計程車','uber','機車','汽車'] },
+      { id: 'education', name: '學習', icon: 'fas fa-book', color: '#10B981', keywords: ['書局','博客來','誠品','補習','文具'] },
+      { id: 'entertainment', name: '娛樂', icon: 'fas fa-gamepad', color: '#EF4444', keywords: ['威秀','國賓','影城','電影','ktv','遊戲','app store','google play','蝦皮','健身','台灣迪卡儂'] },
+      { id: 'other', name: '其他', icon: 'fas fa-ellipsis-h', color: '#6B7280', keywords: [] }
     ];
-    let selectedCategoryId = 'food';
+
+    let categories = JSON.parse(localStorage.getItem('my_categories')) || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+    let records = [];
+    let selectedCategoryId = categories[0].id;
     let currentTab = 'add';
+    let cloudHasUpdate = false;
+
+    // 搜尋與篩選狀態
     let currentSearchQuery = '';
     let currentCategoryFilter = null;
     let pieChartSlices = [];
+
+    // ==========================================
+    // 🎨 分類編輯相關
+    // ==========================================
+    const AVAILABLE_ICONS = ['fas fa-utensils', 'fas fa-tshirt', 'fas fa-home', 'fas fa-car', 'fas fa-book', 'fas fa-gamepad', 'fas fa-shopping-cart', 'fas fa-heart', 'fas fa-gift', 'fas fa-plane', 'fas fa-pills', 'fas fa-paw', 'fas fa-baby', 'fas fa-music', 'fas fa-basketball-ball', 'fas fa-laptop', 'fas fa-mobile-alt', 'fas fa-coffee', 'fas fa-camera', 'fas fa-dumbbell', 'fas fa-bus', 'fas fa-train', 'fas fa-subway', 'fas fa-ellipsis-h'];
+    const AVAILABLE_COLORS = ['#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6', '#10B981', '#EF4444', '#6B7280', '#14B8A6', '#F43F5E', '#84CC16', '#8B4513', '#4B0082', '#FF8C00', '#2E8B57', '#4682B4'];
+    
+    let selectedIconForCat = AVAILABLE_ICONS[0];
+    let selectedColorForCat = AVAILABLE_COLORS[0];
+
+    window.openCategoryModal = (catId = null) => {
+        const modal = document.getElementById('category-modal');
+        const inner = modal.querySelector('div');
+        modal.classList.remove('opacity-0', 'pointer-events-none');
+        inner.classList.remove('translate-y-full');
+        inner.classList.add('translate-y-0');
+
+        if (catId) {
+            document.getElementById('cat-modal-title').innerText = '編輯分類';
+            const cat = categories.find(c => c.id === catId);
+            document.getElementById('cat-id-input').value = cat.id;
+            document.getElementById('cat-name-input').value = cat.name;
+            document.getElementById('cat-keywords-input').value = (cat.keywords||[]).join(', ');
+            selectedIconForCat = cat.icon;
+            selectedColorForCat = cat.color;
+            
+            if(cat.id === 'other') {
+               document.getElementById('cat-delete-btn').classList.add('hidden');
+            } else {
+               document.getElementById('cat-delete-btn').classList.remove('hidden');
+            }
+        } else {
+            document.getElementById('cat-modal-title').innerText = '新增分類';
+            document.getElementById('cat-id-input').value = '';
+            document.getElementById('cat-name-input').value = '';
+            document.getElementById('cat-keywords-input').value = '';
+            selectedIconForCat = AVAILABLE_ICONS[0];
+            selectedColorForCat = AVAILABLE_COLORS[0];
+            document.getElementById('cat-delete-btn').classList.add('hidden');
+        }
+        renderCatModalPickers();
+    };
+
+    window.closeCategoryModal = () => {
+        const modal = document.getElementById('category-modal');
+        const inner = modal.querySelector('div');
+        inner.classList.remove('translate-y-0');
+        inner.classList.add('translate-y-full');
+        setTimeout(() => { modal.classList.add('opacity-0', 'pointer-events-none'); }, 300);
+    };
+
+    window.renderCatModalPickers = () => {
+       const iconHtml = AVAILABLE_ICONS.map(i => `
+         <button onclick="selectModalIcon('${i}')" class="w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${selectedIconForCat===i ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-transparent bg-gray-100 text-gray-500 hover:bg-gray-200'}">
+            <i class="${i}"></i>
+         </button>`).join('');
+       document.getElementById('cat-icon-picker').innerHTML = iconHtml;
+
+       const colorHtml = AVAILABLE_COLORS.map(c => `
+         <button onclick="selectModalColor('${c}')" class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-transform ${selectedColorForCat===c ? 'border-gray-800 scale-110' : 'border-transparent hover:scale-110'}" style="background-color: ${c}">
+            ${selectedColorForCat===c ? '<i class="fas fa-check text-white text-xs"></i>' : ''}
+         </button>`).join('');
+       document.getElementById('cat-color-picker').innerHTML = colorHtml;
+    };
+
+    window.selectModalIcon = (icon) => { selectedIconForCat = icon; window.renderCatModalPickers(); };
+    window.selectModalColor = (color) => { selectedColorForCat = color; window.renderCatModalPickers(); };
+
+    window.saveCategory = async () => {
+        const idInput = document.getElementById('cat-id-input').value;
+        const name = document.getElementById('cat-name-input').value.trim();
+        const keywordsRaw = document.getElementById('cat-keywords-input').value;
+        
+        if(!name) { window.showToast('請輸入分類名稱'); return; }
+        const keywords = keywordsRaw.split(',').map(k=>k.trim()).filter(k=>k);
+
+        if (idInput) {
+            const idx = categories.findIndex(c => c.id === idInput);
+            if(idx !== -1) categories[idx] = { ...categories[idx], name, icon: selectedIconForCat, color: selectedColorForCat, keywords };
+        } else {
+            const newId = 'cat_' + Date.now();
+            categories.splice(categories.length - 1, 0, { id: newId, name, icon: selectedIconForCat, color: selectedColorForCat, keywords });
+        }
+
+        localStorage.setItem('my_categories', JSON.stringify(categories));
+        await syncCategoriesToCloud();
+        
+        renderCategories();
+        renderSettingsCategories();
+        if(currentTab === 'stats') updateStatsView();
+        
+        window.closeCategoryModal();
+        window.showToast('✅ 分類儲存成功');
+    };
+
+    window.deleteCurrentCategory = async () => {
+        const idInput = document.getElementById('cat-id-input').value;
+        if(!idInput || idInput === 'other') return;
+        if(!confirm('確定要刪除此分類嗎？\n(原本屬於此分類的紀錄將會被歸入「其他」)')) return;
+
+        categories = categories.filter(c => c.id !== idInput);
+        let recordsChanged = false;
+        records.forEach(r => {
+            if(r.cat === idInput) { r.cat = 'other'; recordsChanged = true; }
+        });
+
+        localStorage.setItem('my_categories', JSON.stringify(categories));
+        await syncCategoriesToCloud();
+
+        if (recordsChanged) {
+            localStorage.setItem('my_expenses', JSON.stringify(records));
+            if (typeof window.executeDriveUpload === 'function') window.executeDriveUpload(true);
+        }
+
+        renderCategories();
+        renderSettingsCategories();
+        if(currentTab === 'stats') updateStatsView();
+        
+        window.closeCategoryModal();
+        window.showToast('✅ 已刪除分類');
+    };
+
+    async function syncCategoriesToCloud() {
+        if (currentUser) {
+            const catRef = doc(db, 'users', currentUser.uid, 'settings', 'categories');
+            await setDoc(catRef, { list: categories });
+        }
+    }
+
+    function renderSettingsCategories() {
+        const container = document.getElementById('settings-category-list');
+        if(!container) return;
+        container.innerHTML = categories.map(cat => `
+          <div onclick="openCategoryModal('${cat.id}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 border border-transparent hover:border-blue-200 transition-colors">
+            <div class="flex items-center space-x-3">
+               <div class="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0" style="background-color: ${cat.color}">
+                 <i class="${cat.icon} text-sm"></i>
+               </div>
+               <div class="overflow-hidden">
+                 <div class="text-sm font-bold text-gray-800">${cat.name}</div>
+                 <div class="text-[10px] text-gray-500 w-48 truncate">${(cat.keywords||[]).join(', ') || '無設定關鍵字'}</div>
+               </div>
+            </div>
+            <i class="fas fa-edit text-gray-400 text-xs shrink-0"></i>
+          </div>
+        `).join('');
+    }
+
+    function renderCategories() {
+        const container = document.getElementById('category-container');
+        if(!container) return;
+        container.innerHTML = categories.map(cat => `
+          <button onclick="selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}">
+            <div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280">
+              <i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600">${cat.name}</span>
+          </button>`).join('');
+        
+        if(!categories.find(c => c.id === selectedCategoryId)) {
+            selectedCategoryId = categories[0].id;
+        }
+        window.selectCategory(selectedCategoryId);
+    }
 
     // ==========================================
     // 🔒 認證與登入邏輯
@@ -275,7 +532,7 @@
 
     window.handleLogout = async () => {
        await signOut(auth);
-       showToast('已登出帳號');
+       window.showToast('已登出帳號');
     };
 
     onAuthStateChanged(auth, (user) => {
@@ -298,11 +555,14 @@
         records = [];
         document.getElementById('history-list').innerHTML = '';
         if (unsubscribeFirestore) unsubscribeFirestore();
+        if (unsubscribeCatFirestore) unsubscribeCatFirestore();
       }
     });
 
     function setupFirestoreListener() {
       if (!currentUser) return;
+      
+      // 監聽記帳紀錄
       const expensesRef = collection(db, 'users', currentUser.uid, 'expenses');
       unsubscribeFirestore = onSnapshot(expensesRef, (snapshot) => {
         const newRecords = [];
@@ -312,7 +572,22 @@
         
         initDateFilters();
         if (currentTab === 'stats') updateStatsView();
-      }, (error) => { console.error("Firestore 同步錯誤", error); });
+      }, (error) => { console.error("Firestore 紀錄同步錯誤", error); });
+
+      // 監聽自訂分類
+      const catRef = doc(db, 'users', currentUser.uid, 'settings', 'categories');
+      unsubscribeCatFirestore = onSnapshot(catRef, (docSnap) => {
+        if (docSnap.exists() && docSnap.data().list) {
+            categories = docSnap.data().list;
+            localStorage.setItem('my_categories', JSON.stringify(categories));
+            renderCategories();
+            renderSettingsCategories();
+            if (currentTab === 'stats') updateStatsView();
+        } else {
+            // 如果雲端尚未有分類資料，把本機資料寫上去
+            syncCategoriesToCloud();
+        }
+      }, (error) => { console.error("Firestore 分類同步錯誤", error); });
     }
 
     // ==========================================
@@ -321,7 +596,7 @@
     window.addRecord = async () => {
       const amountInput = document.getElementById('input-amount');
       const amount = Number(amountInput.value);
-      if(!amount || amount <= 0) { showToast('請輸入有效的金額！'); return; }
+      if(!amount || amount <= 0) { window.showToast('請輸入有效的金額！'); return; }
       
       const newRecord = { 
         id: Date.now().toString(), amount, cat: selectedCategoryId, 
@@ -333,14 +608,14 @@
         await setDoc(docRef, newRecord);
       }
       amountInput.value = ''; document.getElementById('input-note').value = '';
-      showToast('✅ 記帳成功！');
+      window.showToast('✅ 記帳成功！');
     };
 
     window.deleteRecord = async (id) => {
       if(confirm('確定要刪除這筆紀錄嗎？') && currentUser) {
         const docRef = doc(db, 'users', currentUser.uid, 'expenses', id);
         await deleteDoc(docRef);
-        showToast('已刪除紀錄');
+        window.showToast('已刪除紀錄');
       }
     };
 
@@ -351,13 +626,13 @@
 
       if (field === 'amount') {
           value = Number(value);
-          if (!value || value <= 0) { showToast('無效金額'); updateStatsView(); return; }
+          if (!value || value <= 0) { window.showToast('無效金額'); window.updateStatsView(); return; }
       } else if (field === 'note') value = value.trim();
 
       const updatedRecord = { ...record, [field]: value };
       const docRef = doc(db, 'users', currentUser.uid, 'expenses', id);
       await setDoc(docRef, updatedRecord, { merge: true });
-      showToast('✅ 紀錄已自動儲存');
+      window.showToast('✅ 紀錄已自動儲存');
     };
 
     window.clearAllData = async () => {
@@ -366,7 +641,7 @@
           const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
           await deleteDoc(docRef);
         }
-        showToast('已清空所有資料');
+        window.showToast('已清空所有資料');
       }
     };
 
@@ -376,16 +651,19 @@
       document.getElementById(`view-${tab}`).classList.remove('hidden');
       document.querySelectorAll('nav button').forEach(b => { b.classList.remove('text-blue-600'); b.classList.add('text-gray-400'); });
       document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
-      if(tab === 'stats') updateStatsView();
+      if(tab === 'stats') window.updateStatsView();
+      if(tab === 'settings') renderSettingsCategories();
     };
 
     window.selectCategory = (id) => {
       selectedCategoryId = id;
       document.querySelectorAll('.cat-btn').forEach(btn => {
-        const cat = CATEGORIES.find(c => c.id === btn.dataset.id);
+        const catId = btn.dataset.id;
+        const cat = categories.find(c => c.id === catId);
+        if(!cat) return;
         const iconWrap = btn.querySelector('.icon-wrap');
         const textSpan = btn.querySelector('span');
-        if(btn.dataset.id === id) {
+        if(catId === id) {
           btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-blue-50 border-blue-500`;
           iconWrap.style.backgroundColor = cat.color; iconWrap.style.color = 'white';
           textSpan.className = `text-[10px] transition-colors font-bold text-blue-700`;
@@ -397,21 +675,42 @@
       });
     };
 
-    function showToast(msg) {
+    window.showToast = (msg) => {
       const toast = document.getElementById('toast');
       document.getElementById('toast-msg').innerText = msg;
       toast.classList.remove('opacity-0');
       setTimeout(() => toast.classList.add('opacity-0'), 2000);
-    }
+    };
     
     function initUI() {
+      const saved = localStorage.getItem('my_expenses');
+      if(saved) records = JSON.parse(saved);
       document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
-      document.getElementById('category-container').innerHTML = CATEGORIES.map(cat => `
-        <button onclick="selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}">
-          <div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280">
-            <i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600">${cat.name}</span>
-        </button>`).join('');
-      window.selectCategory('food');
+      renderCategories();
+      renderSettingsCategories();
+      initDateFilters(true);
+      initCanvasClickListener();
+    }
+
+    function initCanvasClickListener() {
+      const canvas = document.getElementById('pieChart');
+      canvas.addEventListener('click', function(e) {
+        if (pieChartSlices.length === 0) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        const cx = canvas.width / 2; const cy = canvas.height / 2;
+        const dx = x - cx; const dy = y - cy;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const radius = Math.min(cx, cy);
+        if (distance > radius || distance < radius * 0.6) return;
+        let angle = Math.atan2(dy, dx);
+        if (angle < -0.5 * Math.PI) angle += 2 * Math.PI;
+        const clickedSlice = pieChartSlices.find(s => angle >= s.startAngle && angle <= s.endAngle);
+        if (clickedSlice) window.filterByCategory(clickedSlice.id);
+      });
     }
 
     // 統計與圖表渲染
@@ -421,12 +720,9 @@
       const monthSelect = document.getElementById('filter-month');
       
       if (selectedYear === 'all') { 
-        monthSelect.value = 'all'; 
-        monthSelect.disabled = true; 
-        monthSelect.classList.add('opacity-50', 'bg-gray-100'); 
+        monthSelect.value = 'all'; monthSelect.disabled = true; monthSelect.classList.add('opacity-50', 'bg-gray-100'); 
       } else { 
-        monthSelect.disabled = false; 
-        monthSelect.classList.remove('opacity-50', 'bg-gray-100'); 
+        monthSelect.disabled = false; monthSelect.classList.remove('opacity-50', 'bg-gray-100'); 
       }
       
       let filteredRecords = records; 
@@ -444,51 +740,37 @@
       
       if (currentSearchQuery) {
           filteredRecords = filteredRecords.filter(r => {
-             const catName = CATEGORIES.find(c => c.id === r.cat)?.name || '';
+             const catName = categories.find(c => c.id === r.cat)?.name || '';
              return (r.note && r.note.toLowerCase().includes(currentSearchQuery)) || catName.includes(currentSearchQuery);
           });
       }
 
       document.getElementById('stats-title-text').innerText = titleText;
-      let total = 0; 
-      let totalsByCat = {};
+      let total = 0; let totalsByCat = {};
       
-      filteredRecords.forEach(r => { 
-        total += r.amount; 
-        totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; 
-      });
+      filteredRecords.forEach(r => { total += r.amount; totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; });
       document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
       
       const canvas = document.getElementById('pieChart'); 
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const cx = canvas.width / 2; 
-      const cy = canvas.height / 2; 
-      const radius = Math.min(cx, cy); 
+      const cx = canvas.width / 2; const cy = canvas.height / 2; const radius = Math.min(cx, cy); 
       pieChartSlices = [];
       
       if(total === 0) {
-        ctx.fillStyle = '#f3f4f6'; 
-        ctx.beginPath(); 
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2); 
-        ctx.fill();
+        ctx.fillStyle = '#f3f4f6'; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
         document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
       } else {
-        let startAngle = -0.5 * Math.PI; 
-        let breakdownArr = [];
+        let startAngle = -0.5 * Math.PI; let breakdownArr = [];
         
-        CATEGORIES.forEach(cat => {
+        categories.forEach(cat => {
           if(totalsByCat[cat.id]) {
              const amount = totalsByCat[cat.id]; 
              const sliceAngle = (amount / total) * 2 * Math.PI; 
              const endAngle = startAngle + sliceAngle;
              
              ctx.fillStyle = cat.color; 
-             ctx.beginPath(); 
-             ctx.moveTo(cx, cy); 
-             ctx.arc(cx, cy, radius, startAngle, endAngle); 
-             ctx.closePath(); 
-             ctx.fill(); 
+             ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
              
              pieChartSlices.push({ id: cat.id, startAngle, endAngle }); 
              startAngle = endAngle;
@@ -496,11 +778,7 @@
           }
         });
         
-        ctx.fillStyle = '#ffffff'; 
-        ctx.beginPath(); 
-        ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); 
-        ctx.fill();
-        
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
         breakdownArr.sort((a,b) => b.amount - a.amount);
         document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `
           <div onclick="filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}">
@@ -513,8 +791,8 @@
       const listTitle = document.getElementById('history-list-title');
       
       if (currentSearchQuery || currentCategoryFilter) {
-          let catName = currentCategoryFilter ? CATEGORIES.find(c => c.id === currentCategoryFilter).name : '';
-          listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${catName}</span>`;
+          let catName = currentCategoryFilter ? categories.find(c => c.id === currentCategoryFilter)?.name : '';
+          listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${catName||''}</span>`;
       } else {
           listTitle.innerHTML = '區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊直接修改)</span>';
       }
@@ -523,20 +801,20 @@
       if(listRecords.length === 0) { 
           historyContainer.innerHTML = '<div class="text-center py-6 text-gray-400 text-sm">此區間/條件下尚未有記帳紀錄</div>'; 
       } else {
-         const catOptionsTemplate = CATEGORIES.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+         const catOptionsTemplate = categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
          historyContainer.innerHTML = listRecords.map(r => {
-           const cat = CATEGORIES.find(c => c.id === r.cat) || CATEGORIES[6];
+           const cat = categories.find(c => c.id === r.cat) || categories.find(c => c.id === 'other') || categories[0];
            const currentCatOptions = catOptionsTemplate.replace(`value="${cat.id}"`, `value="${cat.id}" selected`);
            return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative">
                <div class="flex items-center space-x-3 w-[65%]">
                  <div class="relative shrink-0 cursor-pointer" title="更換分類">
                    <select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select>
-                   <div class="p-3 rounded-full flex items-center justify-center" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
+                   <div class="p-3 rounded-full flex items-center justify-center transition-transform group-hover:scale-105" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
                  </div>
                  <div class="overflow-hidden flex-1">
                    <div class="font-bold text-gray-800 text-sm flex items-center relative">
                       <div class="relative cursor-pointer"><select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>
-                      ${r.id.startsWith('INV_') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}
+                      ${r.id.startsWith('INV') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}
                    </div>
                    <div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">
                      <input type="date" value="${r.date}" onchange="updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10">
@@ -570,16 +848,16 @@
     }
 
     // ==========================================
-    // 🧾 雲端發票 CSV 解析與匯入邏輯
+    // 🧾 雲端發票 CSV 解析與匯入邏輯 (動態比對版)
     // ==========================================
     window.autoCategorize = (shopName) => {
       const name = shopName.toLowerCase();
-      if(name.match(/統一超商|全家|萊爾富|ＯＫ|麥當勞|肯德基|摩斯|星巴克|八方雲集|便當|麵|飲料|茶|餐廳|咖啡|食堂|烘焙|好市多|和德昌|三商|餐飲|購好康|爭鮮|壽司|飲店|牛乳大王|食品|家福|統一|鼎城小吃/)) return 'food';
-      if(name.match(/全聯|大潤發|家樂福|愛買|寶雅|屈臣氏|康是美|五金|水電|瓦斯|電信|電力|水費|特力屋|土地開發基金|小米|富邦媒體|宜家家居|自來水|金興發/)) return 'housing';
-      if(name.match(/中油|台塑|加油|停車|台鐵|高鐵|捷運|客運|計程車|uber|機車|汽車/)) return 'transport';
-      if(name.match(/uniqlo|net|服飾|鞋|包|百貨|年青人眼鏡/)) return 'clothes';
-      if(name.match(/威秀|國賓|影城|電影|ktv|遊戲|app store|google play|蝦皮|健身|台灣迪卡儂/)) return 'entertainment';
-      if(name.match(/書局|博客來|誠品|補習|文具/)) return 'education';
+      // 動態掃描所有自訂分類的關鍵字
+      for (const cat of categories) {
+        if (cat.keywords && cat.keywords.some(kw => name.includes(kw.toLowerCase()))) {
+            return cat.id;
+        }
+      }
       return 'other'; 
     };
 
@@ -667,20 +945,20 @@
           });
 
           if(newRecordsCount > 0 && currentUser) {
-            showToast('⏳ 正在同步匯入至雲端...');
+            window.showToast('⏳ 正在同步匯入至雲端...');
             for (const record of newLocalRecords) {
                 const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
                 await setDoc(docRef, record);
             }
-            showToast(`✅ 成功匯入 ${newRecordsCount} 張發票 (略過 ${skipCount} 張重複)`);
+            window.showToast(`✅ 成功匯入 ${newRecordsCount} 張發票 (略過 ${skipCount} 張重複)`);
           } else if(newRecordsCount > 0 && !currentUser) {
-            showToast('⚠️ 請先登入才能匯入發票');
+            window.showToast('⚠️ 請先登入才能匯入發票');
           } else {
-            showToast(`⚠️ 沒有找到新發票 (略過 ${skipCount} 張重複)`);
+            window.showToast(`⚠️ 沒有找到新發票 (略過 ${skipCount} 張重複)`);
           }
         } catch(err) { 
           console.error(err);
-          showToast('❌ 無法解析發票 CSV 檔案'); 
+          window.showToast('❌ 無法解析發票 CSV 檔案'); 
         }
         event.target.value = ''; 
       };
@@ -688,8 +966,65 @@
     };
 
     // ==========================================
-    // 📁 Google Drive 手動備份機制
+    // 📁 傳統手動 JSON 備份機制 (相容舊版與包含分類)
     // ==========================================
+    window.exportData = () => {
+      const payload = {
+        records: records,
+        categories: categories
+      };
+      const dataStr = JSON.stringify(payload);
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      const fileName = `expense_backup_${new Date().toISOString().split('T')[0]}.json`;
+      const link = document.createElement('a');
+      link.setAttribute('href', dataUri);
+      link.setAttribute('download', fileName); link.click();
+      window.showToast('✅ 備份檔案已下載');
+    };
+
+    window.importData = (event) => {
+      const file = event.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          let newRecords = [];
+          
+          // 相容舊版本的 Array 格式，或新版本的 Object 格式
+          if(Array.isArray(imported)) {
+            newRecords = imported;
+          } else if (imported.records) {
+            newRecords = imported.records;
+            if(imported.categories) {
+               categories = imported.categories;
+               localStorage.setItem('my_categories', JSON.stringify(categories));
+               await syncCategoriesToCloud();
+               renderCategories();
+               renderSettingsCategories();
+            }
+          } else {
+            throw new Error('Format unknown');
+          }
+          
+          if(newRecords.length > 0 && currentUser) {
+             window.showToast('⏳ 正在上傳至雲端資料庫...');
+             for(const rec of newRecords) {
+                const docRef = doc(db, 'users', currentUser.uid, 'expenses', rec.id);
+                await setDoc(docRef, rec);
+             }
+             window.showToast('✅ 資料還原與上傳成功');
+          } else if(!currentUser) {
+             window.showToast('⚠️ 請先登入 Google 帳號才能還原資料');
+          }
+        } catch(err) { 
+          window.showToast('❌ 無法解析備份檔案格式'); 
+        }
+        event.target.value = ''; 
+      };
+      reader.readAsText(file);
+    };
+
+    // Google Drive 相關代碼保持不變
     const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
     let tokenClient;
     const SYNC_FILE_NAME = '極簡記帳備份_AutoSync.json';
@@ -717,19 +1052,19 @@
     }, 300);
 
     window.executeDriveUpload = () => {
-      if (!tokenClient) { showToast("正在載入服務，請稍後"); return; }
+      if (!tokenClient) { return; }
       localStorage.setItem('pending_drive_action', 'upload');
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     };
 
     window.syncFromDriveManual = () => {
-      if (!tokenClient) { showToast("正在載入服務，請稍後"); return; }
+      if (!tokenClient) { window.showToast("正在載入服務，請稍後"); return; }
       localStorage.setItem('pending_drive_action', 'download');
       tokenClient.requestAccessToken({ prompt: 'select_account' });
     };
 
     async function performDriveUpload(accessToken) {
-      showToast('⏳ 正在上傳至 Google Drive...');
+      window.showToast('⏳ 正在上傳至 Google Drive...');
       const fileContent = JSON.stringify(records);
       let fileId = localStorage.getItem('drive_file_id');
       const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
@@ -737,10 +1072,9 @@
       try {
         if (!fileId) {
           const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-          
           if (!searchRes.ok) throw new Error(`API 請求失敗`);
           const searchData = await searchRes.json();
-          if (searchData.error) throw new Error(searchData.error.message || "API 存取被拒");
+          if (searchData.error) throw new Error(searchData.error.message);
           if (searchData.files && searchData.files.length > 0) fileId = searchData.files[0].id;
         }
 
@@ -756,35 +1090,28 @@
 
         if (response.ok) {
            const data = await response.json(); localStorage.setItem('drive_file_id', data.id || fileId);
-           showToast('✅ 成功備份至 Google Drive！');
-        } else {
-           throw new Error(`寫入失敗`);
-        }
-      } catch (error) { 
-        console.error("上傳失敗", error);
-        showToast('❌ 備份失敗'); 
-      }
+           window.showToast('✅ 成功備份至 Google Drive！');
+        } else { throw new Error(`寫入失敗`); }
+      } catch (error) { window.showToast('❌ 備份失敗'); }
     }
 
     async function performDriveDownload(accessToken) {
-      showToast('⏳ 正在從 Google Drive 讀取...');
+      window.showToast('⏳ 正在從 Google Drive 讀取...');
       const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
       try {
         const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-        
         if (!searchRes.ok) throw new Error(`API 請求失敗`);
         const searchData = await searchRes.json();
-        if (searchData.error) throw new Error(searchData.error.message || "API 存取被拒");
+        if (searchData.error) throw new Error(searchData.error.message);
         
         if (searchData.files && searchData.files.length > 0) {
           const fileId = searchData.files[0].id;
           const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
           
-          if (!contentRes.ok) throw new Error(`讀取備份內容失敗`);
+          if (!contentRes.ok) throw new Error(`讀取備份失敗`);
           const text = await contentRes.text();
-          if (!text) { showToast('目前備份檔為空'); return; }
+          if (!text) { window.showToast('目前備份檔為空'); return; }
           const cloudRecords = JSON.parse(text);
-          
           if (!Array.isArray(cloudRecords)) throw new Error('檔案格式不符');
           if (!currentUser) throw new Error('Firebase 尚未連線');
 
@@ -796,19 +1123,13 @@
               const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
               await setDoc(docRef, record);
             }
-            showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料`);
-          } else {
-            showToast('目前資料已是最新狀態');
-          }
-        } else {
-          showToast('❌ 雲端硬碟中找不到備份檔');
-        }
-      } catch (error) { 
-        console.error("下載失敗", error);
-        showToast('❌ 下載失敗'); 
-      }
+            window.showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料`);
+          } else { window.showToast('目前資料已是最新狀態'); }
+        } else { window.showToast('❌ 雲端硬碟中找不到備份檔'); }
+      } catch (error) { window.showToast('❌ 下載失敗'); }
     }
 
+    // 啟動初始化
     initUI();
   </script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
