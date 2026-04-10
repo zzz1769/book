@@ -86,7 +86,7 @@
     <header class="bg-white px-4 pt-10 pb-3 shadow-sm z-10 flex justify-between items-center shrink-0 h-16">
       <div class="text-base font-bold text-gray-800 tracking-wide">極簡記帳</div>
       
-      <!-- 修復：補回 Firebase 連線狀態指示器 -->
+      <!-- Firebase 連線狀態指示器 -->
       <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold shadow-sm transition-all" id="firebase-status">
         <i class="fas fa-spinner fa-spin"></i>
         <span>連線中...</span>
@@ -204,7 +204,7 @@
           </div>
           <div class="p-4">
             <div class="relative">
-              <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+              <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
               <button class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-bold shadow-sm pointer-events-none">
                 <i class="fas fa-file-invoice mr-2"></i> 匯入財政部發票 CSV
               </button>
@@ -212,24 +212,32 @@
           </div>
         </div>
 
-        <!-- 修復：清理無效的 Google Drive UI，回歸純淨的 Firebase + JSON 備份功能 -->
+        <!-- 資料備份與還原區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50 flex justify-between items-start">
             <div>
-              <h2 class="text-lg font-bold text-gray-800">資料庫連線 (Firebase)</h2>
-              <p class="text-xs text-gray-500 mt-1">雲端即時同步中，您也可以將資料匯出備份到裝置。</p>
+              <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
+              <p class="text-xs text-gray-500 mt-1">除了 Firebase 即時同步，您也可以手動備份至 Google Drive 或下載檔案。</p>
             </div>
             <i class="fas fa-database text-blue-500 text-xl mt-1"></i>
           </div>
           <div class="p-4 space-y-3">
+            
+            <button onclick="executeDriveUpload()" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
+              <i class="fab fa-google-drive mr-2"></i> 備份資料至 Google Drive
+            </button>
 
-            <button onclick="exportData()" class="w-full flex items-center justify-center py-2.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
-              <i class="fas fa-download mr-2"></i> 下載資料庫備份 (JSON)
+            <button onclick="syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all">
+              <i class="fas fa-cloud-download-alt mr-2"></i> 從 Drive 下載並合併資料
+            </button>
+
+            <button onclick="exportData()" class="w-full flex items-center justify-center py-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium transition-all active:scale-95">
+              <i class="fas fa-download mr-2"></i> 直接下載備份檔 (JSON)
             </button>
 
             <div class="relative">
-              <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-              <button class="w-full flex items-center justify-center py-2.5 bg-green-50 text-green-700 rounded-lg text-sm font-bold border border-green-200 pointer-events-none">
+              <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+              <button class="w-full flex items-center justify-center py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-medium border border-gray-200 pointer-events-none transition-all">
                 <i class="fas fa-upload mr-2"></i> 從 JSON 檔案還原
               </button>
             </div>
@@ -537,7 +545,6 @@
           const authScreen = document.getElementById('auth-screen');
           
           if (user) {
-            // 加入安全檢查，避免 statusEl 不存在時引發錯誤
             if (statusEl) {
                 statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
                 statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all";
@@ -1037,8 +1044,147 @@
     };
 
     // ==========================================
-    // 📁 JSON 備份機制
+    // 📁 Google Drive 備份與 JSON 機制
     // ==========================================
+    const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
+    let tokenClient;
+    const SYNC_FILE_NAME = '極簡記帳備份_AutoSync.json';
+
+    window.initGoogleClient = () => {
+      if (typeof google === 'undefined' || !google.accounts) return;
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: async (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+             const action = localStorage.getItem('pending_drive_action');
+             if(action === 'upload') await performDriveUpload(tokenResponse.access_token);
+             else if(action === 'download') await performDriveDownload(tokenResponse.access_token);
+          }
+        }
+      });
+    };
+
+    // 背景檢查 google accounts script 是否載入完畢
+    const checkGoogleLoaded = setInterval(() => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        window.initGoogleClient();
+        clearInterval(checkGoogleLoaded);
+      }
+    }, 300);
+
+    window.executeDriveUpload = () => {
+      if (!tokenClient) { window.showToast("正在載入 Google 服務，請稍後"); return; }
+      localStorage.setItem('pending_drive_action', 'upload');
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    };
+
+    window.syncFromDriveManual = () => {
+      if (!tokenClient) { window.showToast("正在載入 Google 服務，請稍後"); return; }
+      localStorage.setItem('pending_drive_action', 'download');
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    };
+
+    async function performDriveUpload(accessToken) {
+      window.showToast('⏳ 正在上傳至 Google Drive...');
+      // 確保備份同時包含紀錄與分類設定
+      const payload = {
+        records: records,
+        categories: categories
+      };
+      const fileContent = JSON.stringify(payload);
+      let fileId = localStorage.getItem('drive_file_id');
+      const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
+      
+      try {
+        if (!fileId) {
+          const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+          if (!searchRes.ok) throw new Error(`API 請求失敗`);
+          const searchData = await searchRes.json();
+          if (searchData.error) throw new Error(searchData.error.message);
+          if (searchData.files && searchData.files.length > 0) fileId = searchData.files[0].id;
+        }
+
+        let response;
+        if (fileId) {
+           response = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: fileContent });
+        } else {
+          const form = new FormData();
+          form.append('metadata', new Blob([JSON.stringify({ name: SYNC_FILE_NAME, mimeType: 'application/json' })], { type: 'application/json' }));
+          form.append('file', new Blob([fileContent], { type: 'application/json' }));
+          response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}` }, body: form });
+        }
+
+        if (response.ok) {
+           const data = await response.json(); localStorage.setItem('drive_file_id', data.id || fileId);
+           window.showToast('✅ 成功備份至 Google Drive！');
+        } else { throw new Error(`寫入失敗`); }
+      } catch (error) { window.showToast('❌ 備份失敗，請確認網路連線'); }
+    }
+
+    async function performDriveDownload(accessToken) {
+      window.showToast('⏳ 正在從 Google Drive 讀取...');
+      const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
+      try {
+        const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        if (!searchRes.ok) throw new Error(`API 請求失敗`);
+        const searchData = await searchRes.json();
+        if (searchData.error) throw new Error(searchData.error.message);
+        
+        if (searchData.files && searchData.files.length > 0) {
+          const fileId = searchData.files[0].id;
+          const contentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+          
+          if (!contentRes.ok) throw new Error(`讀取備份失敗`);
+          const text = await contentRes.text();
+          if (!text) { window.showToast('目前備份檔為空'); return; }
+          const imported = JSON.parse(text);
+
+          let cloudRecords = [];
+          if (Array.isArray(imported)) {
+             cloudRecords = imported;
+          } else if (imported.records) {
+             cloudRecords = imported.records;
+             if (imported.categories) {
+                categories = imported.categories;
+                localStorage.setItem('my_categories', JSON.stringify(categories));
+                if(typeof syncCategoriesToCloud === 'function') await syncCategoriesToCloud();
+                window.renderCategories();
+                window.renderSettingsCategories();
+             }
+          }
+
+          if (!Array.isArray(cloudRecords)) throw new Error('檔案格式不符');
+          
+          if (!currentUser) {
+              const localIds = new Set(records.map(r => r.id));
+              const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
+              if(newFromCloud.length > 0) {
+                  records = [...records, ...newFromCloud];
+                  records.sort((a,b) => new Date(b.date) - new Date(a.date));
+                  localStorage.setItem('my_expenses', JSON.stringify(records));
+                  window.showToast(`✅ 已合併 ${newFromCloud.length} 筆資料`);
+                  if(currentTab === 'stats') window.updateStatsView();
+              } else {
+                  window.showToast('本地端資料已是最新');
+              }
+          } else {
+              const localIds = new Set(records.map(r => r.id));
+              const newFromCloud = cloudRecords.filter(r => !localIds.has(r.id));
+              
+              if (newFromCloud.length > 0) {
+                window.showToast('⏳ 正在同步至 Firebase 資料庫...');
+                for (const record of newFromCloud) {
+                  const docRef = doc(db, 'users', currentUser.uid, 'expenses', record.id);
+                  await setDoc(docRef, record);
+                }
+                window.showToast(`✅ 已合併 ${newFromCloud.length} 筆雲端資料`);
+              } else { window.showToast('目前資料已是最新狀態'); }
+          }
+        } else { window.showToast('❌ 雲端硬碟中找不到備份檔'); }
+      } catch (error) { window.showToast('❌ 下載失敗'); }
+    }
+
     window.exportData = () => {
       const payload = {
         records: records,
@@ -1097,5 +1243,8 @@
     // 啟動初始化
     initUI();
   </script>
+  
+  <!-- 載入 Google Drive API 所需的腳本 -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>
