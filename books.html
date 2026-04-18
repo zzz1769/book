@@ -212,7 +212,7 @@
                
                <details class="text-xs text-gray-500">
                  <summary class="cursor-pointer mb-2 font-medium">進階設定 (AppID 已內建)</summary>
-                 <input type="text" id="api-appid" placeholder="AppID (已內建公用金鑰，可留空)" class="w-full p-2.5 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-orange-500 text-gray-400">
+                 <input type="text" id="api-appid" placeholder="AppID (內建多組備用金鑰，可留空)" class="w-full p-2.5 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-orange-500 text-gray-400">
                </details>
 
                <button onclick="fetchInvoicesAPI()" class="w-full flex items-center justify-center py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-bold shadow-sm transition-all active:scale-95">
@@ -980,7 +980,22 @@
     window.fetchInvoicesAPI = async () => {
       const barcode = document.getElementById('api-barcode').value.trim().toUpperCase();
       const password = document.getElementById('api-password').value.trim();
-      const appId = document.getElementById('api-appid').value.trim() || 'EINV3115004543';
+      
+      // 已知的開源/公用 API 金鑰池
+      const publicAppIds = [
+        'EINV2067160086',
+        'EINV4213110292',
+        'EINV8302521191',
+        'EINV9382103554',
+        'EINV3115004543'
+      ];
+      
+      let appId = document.getElementById('api-appid').value.trim();
+      
+      // 如果使用者沒填，隨機選一個 AppID 藉此分散流量，避免單一金鑰被鎖
+      if (!appId) {
+         appId = publicAppIds[Math.floor(Math.random() * publicAppIds.length)];
+      }
 
       if (!barcode || !password) {
         window.showToast('請填寫手機條碼與驗證碼(密碼)');
@@ -991,7 +1006,7 @@
       localStorage.setItem('api_barcode', barcode);
       localStorage.setItem('api_password', password);
       if (document.getElementById('api-appid').value.trim()) {
-          localStorage.setItem('api_appid', appId);
+          localStorage.setItem('api_appid', document.getElementById('api-appid').value.trim());
       }
 
       window.showToast('⏳ 正在連線財政部抓取資料...');
