@@ -196,42 +196,17 @@
           </div>
         </div>
         
-        <!-- 雲端發票整合區塊 (API + CSV) -->
+        <!-- 雲端發票匯入區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50">
             <h2 class="text-lg font-bold text-gray-800">雲端發票整合</h2>
-            <p class="text-xs text-gray-500 mt-1">透過 API 自動同步，或手動匯入發票明細表(CSV)。</p>
+            <p class="text-xs text-gray-500 mt-1">匯入財政部「發票明細表(CSV)」，系統將依據您設定的關鍵字自動歸類。</p>
           </div>
-          <div class="p-4 space-y-4">
-            
-            <!-- API 連線模式 -->
-            <div class="space-y-3 bg-orange-50/50 p-3 rounded-xl border border-orange-100">
-               <h3 class="text-xs font-bold text-orange-800"><i class="fas fa-bolt mr-1"></i> API 自動同步 (本月發票)</h3>
-               <input type="text" id="api-barcode" placeholder="手機條碼 (例如 /AB12345)" class="w-full p-2.5 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-orange-500 uppercase">
-               <input type="password" id="api-password" placeholder="驗證碼 (密碼)" class="w-full p-2.5 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-orange-500">
-               
-               <details class="text-xs text-gray-500">
-                 <summary class="cursor-pointer mb-2 font-medium">進階設定 (AppID 已內建)</summary>
-                 <input type="text" id="api-appid" placeholder="AppID (內建多組備用金鑰，可留空)" class="w-full p-2.5 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-orange-500 text-gray-400">
-               </details>
-
-               <button onclick="fetchInvoicesAPI()" class="w-full flex items-center justify-center py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-bold shadow-sm transition-all active:scale-95">
-                 <i class="fas fa-sync mr-2"></i> 一鍵同步本月發票
-               </button>
-               <p class="text-[9px] text-gray-400 leading-tight">注意：此功能將透過公開 CORS Proxy 連線以繞過瀏覽器限制。資料僅存於本機與您的資料庫。</p>
-            </div>
-
-            <div class="flex items-center">
-              <div class="flex-1 border-t border-gray-200"></div>
-              <span class="px-3 text-xs text-gray-400">或</span>
-              <div class="flex-1 border-t border-gray-200"></div>
-            </div>
-
-            <!-- CSV 手動匯入模式 -->
+          <div class="p-4">
             <div class="relative">
               <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              <button class="w-full flex items-center justify-center py-2.5 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-sm font-bold shadow-sm pointer-events-none transition-all">
-                <i class="fas fa-file-csv mr-2"></i> 手動匯入財政部 CSV
+              <button class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-bold shadow-sm pointer-events-none">
+                <i class="fas fa-file-invoice mr-2"></i> 匯入財政部發票 CSV
               </button>
             </div>
           </div>
@@ -766,11 +741,6 @@
           window.renderSettingsCategories();
           initDateFilters(true);
           initCanvasClickListener();
-          
-          // 載入儲存的 API 憑證
-          if(document.getElementById('api-barcode')) document.getElementById('api-barcode').value = localStorage.getItem('api_barcode') || '';
-          if(document.getElementById('api-password')) document.getElementById('api-password').value = localStorage.getItem('api_password') || '';
-          if(document.getElementById('api-appid')) document.getElementById('api-appid').value = localStorage.getItem('api_appid') || '';
       } catch (e) {
           console.error("UI 初始化發生錯誤", e);
       }
@@ -973,126 +943,6 @@
           console.error("日期篩選器初始化錯誤", e);
       }
     }
-
-    // ==========================================
-    // ⚡ 財政部 API 自動同步邏輯 (透過 CORS Proxy)
-    // ==========================================
-    window.fetchInvoicesAPI = async () => {
-      const barcode = document.getElementById('api-barcode').value.trim().toUpperCase();
-      const password = document.getElementById('api-password').value.trim();
-      
-      // 已知的開源/公用 API 金鑰池
-      const publicAppIds = [
-        'EINV2067160086',
-        'EINV4213110292',
-        'EINV8302521191',
-        'EINV9382103554',
-        'EINV3115004543'
-      ];
-      
-      let appId = document.getElementById('api-appid').value.trim();
-      
-      // 如果使用者沒填，隨機選一個 AppID 藉此分散流量，避免單一金鑰被鎖
-      if (!appId) {
-         appId = publicAppIds[Math.floor(Math.random() * publicAppIds.length)];
-      }
-
-      if (!barcode || !password) {
-        window.showToast('請填寫手機條碼與驗證碼(密碼)');
-        return;
-      }
-
-      // 儲存於本機供下次使用
-      localStorage.setItem('api_barcode', barcode);
-      localStorage.setItem('api_password', password);
-      if (document.getElementById('api-appid').value.trim()) {
-          localStorage.setItem('api_appid', document.getElementById('api-appid').value.trim());
-      }
-
-      window.showToast('⏳ 正在連線財政部抓取資料...');
-
-      const now = new Date();
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const startDate = `${yyyy}/${mm}/01`;
-      const endDate = `${yyyy}/${mm}/${dd}`;
-
-      const timeStamp = Math.floor(Date.now() / 1000) + 10;
-      const uuid = typeof crypto !== 'undefined' && crypto.randomUUID 
-        ? crypto.randomUUID() 
-        : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
-      const params = new URLSearchParams();
-      params.append('version', '0.5');
-      params.append('cardType', '3J0002');
-      params.append('cardNo', barcode);
-      params.append('expTimeStamp', '2147483647');
-      params.append('action', 'carrierInvChk');
-      params.append('timeStamp', timeStamp);
-      params.append('startDate', startDate);
-      params.append('endDate', endDate);
-      params.append('onlyWinningInv', 'N');
-      params.append('uuid', uuid);
-      params.append('appID', appId);
-      params.append('cardEncrypt', password);
-
-      try {
-        const proxyUrl = 'https://corsproxy.io/?';
-        const targetUrl = 'https://api.einvoice.nat.gov.tw/PB2CAPIVAN/invServ/InvServ';
-        
-        const response = await fetch(proxyUrl + encodeURIComponent(targetUrl), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString()
-        });
-
-        const data = await response.json();
-        
-        if (data.code === '200' && data.details) {
-            let newCount = 0;
-            data.details.forEach(inv => {
-                const invNum = inv.invNum;
-                const recordId = `INV_${invNum}`;
-                
-                if (!records.some(r => r.id === recordId)) {
-                    const formattedDate = (inv.invDate || '').replace(/\//g, '-');
-                    const cat = window.autoCategorize(inv.sellerName);
-                    
-                    records.push({
-                        id: recordId,
-                        amount: parseInt(inv.amount),
-                        cat: cat,
-                        date: formattedDate,
-                        note: `${inv.sellerName} (雲端同步)`
-                    });
-                    newCount++;
-                }
-            });
-
-            if (newCount > 0) {
-                records.sort((a, b) => new Date(b.date) - new Date(a.date));
-                localStorage.setItem('my_expenses', JSON.stringify(records));
-                
-                // 呼叫 Firebase 同步
-                await syncExpensesToCloud();
-                
-                initDateFilters();
-                if(currentTab === 'stats') window.updateStatsView();
-                
-                window.showToast(`✅ 成功同步 ${newCount} 張新發票！`);
-            } else {
-                window.showToast(`⚠️ 發票已是最新，目前無新資料。`);
-            }
-        } else {
-            console.error("API 回傳錯誤:", data);
-            window.showToast(`❌ API 錯誤: ${data.msg || '請確認條碼、密碼是否正確'}`);
-        }
-      } catch (err) {
-        console.error("API 連線失敗", err);
-        window.showToast('❌ 連線財政部失敗，請稍後再試');
-      }
-    };
 
     // ==========================================
     // 🧾 雲端發票 CSV 解析與匯入邏輯
