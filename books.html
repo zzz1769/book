@@ -103,36 +103,44 @@
       
       <!-- ================= 視圖 1: 新增記帳 ================= -->
       <div id="view-add" class="p-3 space-y-3 flex-1 flex flex-col justify-center">
+        
+        <!-- 選擇分類 (移至最上方) -->
         <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-          <label class="block text-xs font-medium text-gray-500 mb-1">消費金額</label>
-          <div class="flex items-center text-2xl font-bold text-gray-800">
-            <span class="mr-2 text-gray-400">$</span>
-            <input type="number" id="input-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0" class="w-full bg-transparent border-none outline-none focus:ring-0 p-0">
-          </div>
-        </div>
-        <div>
           <label class="block text-xs font-medium text-gray-700 mb-2">選擇分類</label>
           <div id="category-container" class="grid grid-cols-4 gap-2">
             <!-- JS 動態生成按鈕 -->
           </div>
         </div>
-        <div class="space-y-2">
+        
+        <!-- 日期與備註 (居中) -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-3">
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
-            <input type="date" id="input-date" class="w-full p-2 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors">
+            <input type="date" id="input-date" class="w-full p-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors">
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">備註 (選填)</label>
-            <input type="text" id="input-note" placeholder="例如：晚餐、捷運..." class="w-full p-2 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors">
+            <input type="text" id="input-note" placeholder="例如：晚餐、捷運..." class="w-full p-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors">
           </div>
         </div>
-        <button onclick="addRecord()" class="w-full mt-2 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md shadow-blue-200 transition-all active:scale-[0.98]">
+
+        <!-- 消費金額 (移至日期下方，強化視覺焦點) -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-blue-100 border-l-4 border-l-blue-500 relative">
+          <label class="block text-xs font-medium text-blue-600 mb-1">消費金額</label>
+          <div class="flex items-center text-3xl font-bold text-gray-800">
+            <span class="mr-2 text-gray-400">$</span>
+            <input type="number" id="input-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0" class="w-full bg-transparent border-none outline-none focus:ring-0 p-0 tracking-tight">
+          </div>
+        </div>
+
+        <button onclick="addRecord()" class="w-full mt-2 py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl shadow-md shadow-blue-200 transition-all active:scale-[0.98]">
           儲存紀錄
         </button>
       </div>
 
       <!-- ================= 視圖 2: 統計分析 ================= -->
-      <div id="view-stats" class="p-3 space-y-3 hidden">
+      <!-- 增加 touch-action: pan-y 避免左右滑動被瀏覽器上一頁/下一頁攔截 -->
+      <div id="view-stats" class="p-3 space-y-3 hidden" style="touch-action: pan-y;">
         <div class="flex space-x-2">
           <select id="filter-year" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center"></select>
           <select id="filter-month" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center">
@@ -153,9 +161,10 @@
           </button>
         </div>
 
-        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md">
-          <h3 id="stats-title-text" class="text-blue-100 text-xs font-medium mb-1">本月總支出</h3>
+        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md relative overflow-hidden">
+          <h3 id="stats-title-text" class="text-blue-100 text-xs font-medium mb-1 transition-all duration-300 transform origin-left">本月總支出</h3>
           <div id="total-expense" class="text-3xl font-bold tracking-tight">$0</div>
+          <i class="fas fa-hand-pointer absolute right-4 top-1/2 -translate-y-1/2 text-white/20 text-4xl animate-pulse hidden md:block"></i>
         </div>
 
         <div id="stats-card" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
@@ -496,7 +505,6 @@
         }
     }
 
-    // 將所有紀錄打包成一個陣列統一上傳，大幅降低 Firebase 讀寫次數
     async function syncExpensesToCloud() {
         if (currentUser) {
             try {
@@ -536,7 +544,7 @@
     };
 
     // ==========================================
-    // 🔒 認證與登入邏輯 (含 Null Check 防呆)
+    // 🔒 認證與登入邏輯
     // ==========================================
     window.signInWithGoogle = async () => {
        if (isSigningIn) return; 
@@ -592,19 +600,16 @@
                 statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
                 statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all";
             }
-            
             if (authScreen) {
                 authScreen.classList.add('opacity-0', 'pointer-events-none');
                 setTimeout(() => { authScreen.style.display = 'none'; }, 300);
             }
-            
             setupFirestoreListener();
           } else {
             if (statusEl) {
                 statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>離線</span>';
                 statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm transition-all";
             }
-            
             if (authScreen) {
                 authScreen.style.display = 'flex';
                 void authScreen.offsetWidth; 
@@ -620,20 +625,11 @@
           }
       } catch (err) {
           console.error("狀態監聽發生未知錯誤:", err);
-          if (user) {
-              const authScreen = document.getElementById('auth-screen');
-              if (authScreen) {
-                  authScreen.classList.add('opacity-0', 'pointer-events-none');
-                  setTimeout(() => { authScreen.style.display = 'none'; }, 300);
-              }
-          }
       }
     });
 
     function setupFirestoreListener() {
       if (!currentUser) return;
-      
-      // 改為監聽「單一文件」(包含整個 list 陣列)，而非一整個集合 (Collection)
       const expensesRef = doc(db, 'users', currentUser.uid, 'sync', 'expenses');
       unsubscribeFirestore = onSnapshot(expensesRef, (docSnap) => {
         try {
@@ -682,7 +678,6 @@
       records.sort((a, b) => new Date(b.date) - new Date(a.date));
       localStorage.setItem('my_expenses', JSON.stringify(records));
       
-      // 更新雲端 (單一檔案更新)
       await syncExpensesToCloud();
       
       amountInput.value = ''; document.getElementById('input-note').value = '';
@@ -693,7 +688,6 @@
       if(confirm('確定要刪除這筆紀錄嗎？') && currentUser) {
         records = records.filter(r => r.id !== id);
         localStorage.setItem('my_expenses', JSON.stringify(records));
-        
         await syncExpensesToCloud();
         window.showToast('已刪除紀錄');
       }
@@ -773,8 +767,8 @@
           window.renderSettingsCategories();
           initDateFilters(true);
           initCanvasClickListener();
+          initSwipeGestures();
           
-          // 載入儲存的 API 憑證
           if(document.getElementById('api-barcode')) document.getElementById('api-barcode').value = localStorage.getItem('api_barcode') || '';
           if(document.getElementById('api-password')) document.getElementById('api-password').value = localStorage.getItem('api_password') || '';
           if(document.getElementById('api-appid')) document.getElementById('api-appid').value = localStorage.getItem('api_appid') || '';
@@ -782,6 +776,90 @@
           console.error("UI 初始化發生錯誤", e);
       }
     }
+
+    // ⚡ 滑動偵測與日期切換功能 ⚡
+    function initSwipeGestures() {
+        const statsView = document.getElementById('view-stats');
+        if (!statsView) return;
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        statsView.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: true});
+
+        statsView.addEventListener('touchend', e => {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            
+            if (currentTab !== 'stats') return;
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            // 判斷是否為橫向滑動 (左右滑動距離大於上下滑動，且滑動距離超過 50px)
+            if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+                if (deltaX > 0) {
+                    // 向右滑動 -> 上一個月/年
+                    window.changeDateByOffset(-1);
+                } else {
+                    // 向左滑動 -> 下一個月/年
+                    window.changeDateByOffset(1);
+                }
+            }
+        }, {passive: true});
+    }
+
+    window.changeDateByOffset = (offset) => {
+        const yearSelect = document.getElementById('filter-year');
+        const monthSelect = document.getElementById('filter-month');
+        if (!yearSelect || !monthSelect) return;
+
+        let currentYear = yearSelect.value;
+        let currentMonth = monthSelect.value;
+
+        if (currentYear === 'all') return; // 如果選「全部年份」，無法推算前後
+
+        let newYearStr = currentYear;
+        let newMonthStr = currentMonth;
+
+        if (currentMonth === 'all') {
+            // 選「全年」時，左右滑動切換「年份」
+            let nextYear = parseInt(currentYear) + offset;
+            newYearStr = nextYear.toString();
+        } else {
+            // 切換「月份」，自動處理跨年份
+            let m = parseInt(currentMonth) + offset;
+            let y = parseInt(currentYear);
+            if (m > 12) { m = 1; y++; } 
+            else if (m < 1) { m = 12; y--; }
+            newYearStr = y.toString();
+            newMonthStr = m.toString().padStart(2, '0');
+        }
+
+        // 確保下拉選單中存在該年份，若沒有則動態新增
+        let options = Array.from(yearSelect.options);
+        if (!options.some(opt => opt.value === newYearStr)) {
+            let years = new Set(records.map(r => r.date.split('-')[0]));
+            years.add(new Date().getFullYear().toString());
+            years.add(newYearStr); // 強制加入滑動到的年份
+            const sortedYears = Array.from(years).sort((a, b) => b - a);
+            yearSelect.innerHTML = '<option value="all">全部年份</option>' + sortedYears.map(y => `<option value="${y}">${y}年</option>`).join('');
+        }
+
+        yearSelect.value = newYearStr;
+        monthSelect.value = newMonthStr;
+
+        // 視覺回饋：讓標題閃爍與放大一下
+        const titleEl = document.getElementById('stats-title-text');
+        if (titleEl) {
+            titleEl.classList.add('scale-105', 'text-yellow-200');
+            setTimeout(() => titleEl.classList.remove('scale-105', 'text-yellow-200'), 300);
+        }
+
+        window.updateStatsView();
+    };
 
     function initCanvasClickListener() {
       const canvas = document.getElementById('pieChart');
@@ -1069,12 +1147,9 @@
                 records.sort((a, b) => new Date(b.date) - new Date(a.date));
                 localStorage.setItem('my_expenses', JSON.stringify(records));
                 
-                // 呼叫 Firebase 同步
                 await syncExpensesToCloud();
-                
                 initDateFilters();
                 if(currentTab === 'stats') window.updateStatsView();
-                
                 window.showToast(`✅ 成功同步 ${newCount} 張新發票！`);
             } else {
                 window.showToast(`⚠️ 發票已是最新，目前無新資料。`);
@@ -1225,7 +1300,6 @@
       });
     };
 
-    // 背景檢查 google accounts script 是否載入完畢
     const checkGoogleLoaded = setInterval(() => {
       if (typeof google !== 'undefined' && google.accounts) {
         window.initGoogleClient();
@@ -1247,11 +1321,7 @@
 
     async function performDriveUpload(accessToken) {
       window.showToast('⏳ 正在上傳至 Google Drive...');
-      // 確保備份同時包含紀錄與分類設定
-      const payload = {
-        records: records,
-        categories: categories
-      };
+      const payload = { records: records, categories: categories };
       const fileContent = JSON.stringify(payload);
       let fileId = localStorage.getItem('drive_file_id');
       const query = encodeURIComponent(`name='${SYNC_FILE_NAME}'`);
@@ -1323,7 +1393,6 @@
               records.sort((a,b) => new Date(b.date) - new Date(a.date));
               localStorage.setItem('my_expenses', JSON.stringify(records));
               
-              // 合併完畢後，直接上傳一次 Firebase
               await syncExpensesToCloud();
               
               window.showToast(`✅ 已合併 ${newFromCloud.length} 筆資料`);
@@ -1336,10 +1405,7 @@
     }
 
     window.exportData = () => {
-      const payload = {
-        records: records,
-        categories: categories
-      };
+      const payload = { records: records, categories: categories };
       const dataStr = JSON.stringify(payload);
       const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
       const fileName = `expense_backup_${new Date().toISOString().split('T')[0]}.json`;
@@ -1399,7 +1465,6 @@
     initUI();
   </script>
   
-  <!-- 載入 Google Drive API 所需的腳本 -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>
