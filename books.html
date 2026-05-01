@@ -112,24 +112,27 @@
           </div>
         </div>
         
-        <!-- 日期與備註 (居中) -->
-        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-3">
+        <!-- 日期、金額與備註區塊 (合併並調整順序) -->
+        <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-4">
+          <!-- 1. 日期 -->
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
             <input type="date" id="input-date" class="w-full p-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors">
           </div>
+
+          <!-- 2. 消費金額 (移至日期跟備註中間，保留強調設計) -->
+          <div class="p-3 bg-blue-50/40 rounded-xl border border-blue-100 border-l-4 border-l-blue-500 relative">
+            <label class="block text-xs font-medium text-blue-600 mb-1">消費金額</label>
+            <div class="flex items-center text-3xl font-bold text-gray-800">
+              <span class="mr-2 text-gray-400">$</span>
+              <input type="number" id="input-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0" class="w-full bg-transparent border-none outline-none focus:ring-0 p-0 tracking-tight">
+            </div>
+          </div>
+
+          <!-- 3. 備註 -->
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">備註 (選填)</label>
             <input type="text" id="input-note" placeholder="例如：晚餐、捷運..." class="w-full p-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors">
-          </div>
-        </div>
-
-        <!-- 消費金額 (移至日期下方，強化視覺焦點) -->
-        <div class="bg-white p-3 rounded-xl shadow-sm border border-blue-100 border-l-4 border-l-blue-500 relative">
-          <label class="block text-xs font-medium text-blue-600 mb-1">消費金額</label>
-          <div class="flex items-center text-3xl font-bold text-gray-800">
-            <span class="mr-2 text-gray-400">$</span>
-            <input type="number" id="input-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0" class="w-full bg-transparent border-none outline-none focus:ring-0 p-0 tracking-tight">
           </div>
         </div>
 
