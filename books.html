@@ -9,18 +9,6 @@
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    
-    @keyframes pulse-red {
-      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
-      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-    }
-    .update-dot {
-      width: 8px; height: 8px; background: #ef4444; border-radius: 50%;
-      position: absolute; top: -2px; right: -2px;
-      animation: pulse-red 2s infinite;
-    }
-    
     input[type="date"]::-webkit-calendar-picker-indicator {
       background: transparent; bottom: 0; color: transparent; cursor: pointer;
       height: auto; left: 0; position: absolute; right: 0; top: 0; width: auto;
@@ -29,20 +17,20 @@
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
-  <!-- ================= 密碼鎖畫面 ================= -->
-  <div id="lock-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
+  <!-- ================= 認證登入畫面 ================= -->
+  <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-        <i class="fas fa-lock text-2xl"></i>
+        <i class="fab fa-google text-3xl"></i>
       </div>
-      <h2 class="text-xl font-bold text-gray-800 mb-2">需要解鎖</h2>
-      <p class="text-sm text-gray-500 mb-6">請輸入密碼以存取您的記帳資料</p>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">歡迎來到極簡記帳</h2>
+      <p class="text-sm text-gray-500 mb-8">請使用 Google 帳號登入以自動同步雲端資料</p>
       
-      <input type="password" id="lock-password" inputmode="numeric" pattern="[0-9]*" class="w-full text-center text-3xl tracking-[0.5em] p-4 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors mb-2" placeholder="••••">
-      <p id="lock-error" class="text-red-500 text-sm mb-4 h-5 opacity-0 transition-opacity">密碼錯誤，請重試</p>
+      <p id="auth-error" class="text-red-500 text-xs mb-4 h-auto opacity-0 transition-opacity">錯誤訊息</p>
       
-      <button onclick="checkPassword()" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
-        解鎖進入
+      <button id="auth-submit-btn" onclick="signInWithGoogle()" class="w-full flex items-center justify-center py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-sm transition-all active:scale-[0.98] mb-4">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5 mr-3" alt="Google">
+        <span id="auth-btn-text">使用 Google 帳號登入</span>
       </button>
     </div>
   </div>
@@ -139,12 +127,8 @@
     <!-- 頂部 Header -->
     <header class="bg-white px-4 pt-10 pb-3 shadow-sm z-10 flex justify-between items-center shrink-0 h-16">
       <div class="text-base font-bold text-gray-800 tracking-wide">極簡記帳</div>
-      <div class="relative">
-        <button id="btn-cloud-sync" onclick="handleCloudButtonClick()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs font-bold shadow-sm transition-all active:scale-95 border border-gray-200">
-          <i id="cloud-icon" class="fas fa-cloud"></i>
-          <span id="cloud-sync-text">未連線</span>
-        </button>
-        <div id="cloud-update-dot" class="update-dot hidden"></div>
+      <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold shadow-sm transition-all" id="firebase-status">
+        <i class="fas fa-spinner fa-spin"></i><span>連線中...</span>
       </div>
     </header>
 
@@ -153,45 +137,31 @@
       <i class="fas fa-check-circle text-green-400 mr-2"></i><span id="toast-msg">操作成功</span>
     </div>
 
-    <!-- 主要視圖區塊 (View Container) -->
+    <!-- 主要視圖區塊 -->
     <main class="flex-1 overflow-y-auto no-scrollbar relative flex flex-col">
       
-      <!-- ===================================================================== -->
-      <!--                         [頁面一] 記帳 (Add)                          -->
-      <!-- ===================================================================== -->
+      <!-- ================= [頁面一] 記帳 (Add) ================= -->
       <div id="view-add" class="p-3 flex-1 flex flex-col">
-        
-        <!-- 頂部切換: 支出 / 收入 / 移轉 -->
         <div class="flex bg-gray-200 p-1 rounded-xl mb-3 shrink-0">
           <button id="btn-type-expense" onclick="setTxType('expense')" class="flex-1 py-1.5 text-sm font-bold bg-white shadow-sm rounded-lg text-gray-800 transition-colors">支出</button>
           <button id="btn-type-income" onclick="setTxType('income')" class="flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors">收入</button>
           <button id="btn-type-transfer" onclick="setTxType('transfer')" class="flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors">移轉</button>
         </div>
 
-        <!-- 選擇分類 (移轉模式時隱藏) -->
         <div id="category-section" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-3 shrink-0">
           <label class="block text-xs font-medium text-gray-700 mb-2">選擇分類</label>
-          <div id="category-container" class="grid grid-cols-4 gap-2">
-            <!-- JS 動態生成按鈕 -->
-          </div>
+          <div id="category-container" class="grid grid-cols-4 gap-2"></div>
         </div>
         
-        <!-- 表單細節區塊 -->
         <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-4 flex-1 overflow-y-auto no-scrollbar">
-          
-          <!-- 日期 -->
           <div class="w-full">
             <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
             <input type="date" id="input-date" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block">
           </div>
-
-          <!-- 資產選擇 (支出/收入 模式) -->
           <div id="asset-single-section" class="w-full">
             <label class="block text-xs font-medium text-gray-700 mb-1">資產帳戶</label>
             <select id="input-asset" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block"></select>
           </div>
-
-          <!-- 移轉資產選擇 (移轉 模式) -->
           <div id="asset-transfer-section" class="w-full hidden space-y-3">
             <div>
               <label class="block text-xs font-medium text-gray-700 mb-1">移出資產 (扣除)</label>
@@ -202,8 +172,6 @@
               <select id="input-asset-to" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block"></select>
             </div>
           </div>
-
-          <!-- 消費金額 -->
           <div class="p-3 bg-blue-50/40 rounded-xl border border-blue-100 border-l-4 border-l-blue-500 relative w-full box-border">
             <label class="block text-xs font-medium text-blue-600 mb-1">金額</label>
             <div class="flex items-center text-3xl font-bold text-gray-800">
@@ -211,8 +179,6 @@
               <input type="number" id="input-amount" inputmode="numeric" pattern="[0-9]*" placeholder="0" class="w-full bg-transparent border-none outline-none focus:ring-0 p-0 tracking-tight block box-border">
             </div>
           </div>
-
-          <!-- 備註 -->
           <div class="w-full pb-2">
             <label class="block text-xs font-medium text-gray-700 mb-1">備註 (選填)</label>
             <input type="text" id="input-note" placeholder="例如：晚餐、跨行轉帳..." class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block">
@@ -224,12 +190,8 @@
         </button>
       </div>
 
-      <!-- ===================================================================== -->
-      <!--                         [頁面二] 統計 (Stats)                        -->
-      <!-- ===================================================================== -->
+      <!-- ================= [頁面二] 統計 (Stats) ================= -->
       <div id="view-stats" class="p-3 space-y-3 hidden" style="touch-action: pan-y;">
-        
-        <!-- 篩選列 -->
         <div class="flex space-x-2">
           <select id="filter-year" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center"></select>
           <select id="filter-month" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center">
@@ -240,14 +202,10 @@
             <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
           </select>
         </div>
-
-        <!-- 統計類型切換 -->
         <div class="flex bg-gray-200 p-1 rounded-lg">
            <button id="stats-type-expense" onclick="setStatsType('expense')" class="flex-1 py-1 text-xs font-bold bg-white shadow-sm rounded text-gray-800 transition-colors">支出分析</button>
            <button id="stats-type-income" onclick="setStatsType('income')" class="flex-1 py-1 text-xs font-bold text-gray-500 rounded transition-colors">收入分析</button>
         </div>
-        
-        <!-- 搜尋列 -->
         <div class="flex space-x-2">
           <div class="relative flex-1">
             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
@@ -255,37 +213,26 @@
           </div>
           <button id="btn-clear-filter" onclick="clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm whitespace-nowrap active:scale-95">清除篩選</button>
         </div>
-
-        <!-- 總計顯示 -->
         <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md relative overflow-hidden">
           <h3 id="stats-title-text" class="text-blue-100 text-xs font-medium mb-1 transition-all duration-300 transform origin-left">本月總額</h3>
           <div id="total-expense" class="text-3xl font-bold tracking-tight">$0</div>
         </div>
-
-        <!-- 圓餅圖與明細 -->
         <div id="stats-card" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center">
           <h3 class="w-full text-left text-sm font-bold text-gray-800 mb-2">結構佔比 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊圖表可篩選)</span></h3>
           <div class="relative flex items-center justify-center h-32 w-32">
             <canvas id="pieChart" width="128" height="128" class="cursor-pointer transition-transform hover:scale-105"></canvas>
-            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-               <span class="text-gray-400 text-[10px]">Total</span>
-            </div>
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"><span class="text-gray-400 text-[10px]">Total</span></div>
           </div>
           <div id="stats-breakdown" class="w-full mt-4 space-y-1"></div>
         </div>
-
-        <!-- 紀錄清單 -->
         <div>
-          <h3 id="history-list-title" class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊文字可直接修改)</span></h3>
+          <h3 id="history-list-title" class="text-sm font-bold text-gray-800 mb-2 px-1">區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊文字可修改)</span></h3>
           <div id="history-list" class="space-y-2 pb-4"></div>
         </div>
       </div>
 
-      <!-- ===================================================================== -->
-      <!--                         [頁面三] 資產 (Assets)                       -->
-      <!-- ===================================================================== -->
+      <!-- ================= [頁面三] 資產 (Assets) ================= -->
       <div id="view-assets" class="p-3 space-y-4 hidden h-full overflow-y-auto no-scrollbar">
-         <!-- Header & Net Worth -->
          <div class="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-5 text-white shadow-md relative mt-1">
             <div class="flex justify-between items-start mb-2">
               <h3 class="text-blue-100 text-sm font-medium">總淨資產</h3>
@@ -295,33 +242,22 @@
             </div>
             <div id="total-net-worth" class="text-4xl font-bold tracking-tight">$0</div>
          </div>
-
-         <!-- Assets List -->
          <div id="assets-list" class="space-y-3 pb-6"></div>
       </div>
 
-      <!-- ===================================================================== -->
-      <!--                         [頁面四] 設定 (Settings)                       -->
-      <!-- ===================================================================== -->
+      <!-- ================= [頁面四] 設定 (Settings) ================= -->
       <div id="view-settings" class="p-3 space-y-3 hidden">
-
-        <!-- 分類管理區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50 flex justify-between items-center">
             <div>
               <h2 class="text-lg font-bold text-gray-800">分類與發票關鍵字</h2>
               <p class="text-xs text-gray-500 mt-1">管理分類並設定發票自動歸類規則。</p>
             </div>
-            <button onclick="openCategoryModal()" class="shrink-0 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm">
-              <i class="fas fa-plus"></i> 新增
-            </button>
+            <button onclick="openCategoryModal()" class="shrink-0 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"><i class="fas fa-plus"></i> 新增</button>
           </div>
-          <div class="p-4">
-            <div id="settings-category-list" class="space-y-2 max-h-60 overflow-y-auto no-scrollbar"></div>
-          </div>
+          <div class="p-4"><div id="settings-category-list" class="space-y-2 max-h-60 overflow-y-auto no-scrollbar"></div></div>
         </div>
         
-        <!-- 雲端發票整合區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50">
             <h2 class="text-lg font-bold text-gray-800">雲端發票整合</h2>
@@ -330,27 +266,22 @@
           <div class="p-4">
             <div class="relative">
               <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              <button class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-bold shadow-sm pointer-events-none transition-all hover:bg-orange-100">
-                <i class="fas fa-file-invoice mr-2"></i> 匯入財政部發票 CSV
-              </button>
+              <button class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-bold shadow-sm pointer-events-none transition-all hover:bg-orange-100"><i class="fas fa-file-invoice mr-2"></i> 匯入財政部發票 CSV</button>
             </div>
           </div>
         </div>
 
-        <!-- 備份區塊 -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           <div class="p-4 border-b border-gray-50 flex justify-between items-start">
             <div>
               <h2 class="text-lg font-bold text-gray-800">資料備份與還原</h2>
-              <p class="text-xs text-gray-500 mt-1">連線後，跨裝置時系統會自動偵測並「合併」本地與雲端的紀錄。</p>
-              <p id="sync-status-label" class="text-[10px] text-gray-400 mt-1 italic">尚未連線同步</p>
+              <p class="text-xs text-gray-500 mt-1">您的資料已由 Firebase 即時同步保護。您也可額外匯出備份。</p>
             </div>
-            <button onclick="connectDrive()" class="ml-2 shrink-0 px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm">切換帳號</button>
           </div>
           <div class="p-4 space-y-3">
-            <button onclick="syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fas fa-sync mr-2"></i> 從雲端下載並合併資料</button>
-            <button onclick="executeDriveUpload(false)" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fab fa-google-drive mr-2"></i> 手動強制同步(上傳)至雲端</button>
-            <button onclick="exportData()" class="w-full flex items-center justify-center py-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium"><i class="fas fa-download mr-2"></i> 直接下載備份檔 (JSON)</button>
+            <button onclick="executeDriveUpload(false)" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fab fa-google-drive mr-2"></i> 額外備份至 Google Drive</button>
+            <button onclick="syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fas fa-sync mr-2"></i> 從 Drive 下載合併</button>
+            <button onclick="exportData()" class="w-full flex items-center justify-center py-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium"><i class="fas fa-download mr-2"></i> 下載備份檔 (JSON)</button>
             <div class="relative">
               <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
               <button class="w-full flex items-center justify-center py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-medium border border-gray-200 pointer-events-none transition-all"><i class="fas fa-upload mr-2"></i> 從 JSON 檔案還原</button>
@@ -359,8 +290,13 @@
         </div>
         
         <div class="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden mt-4">
-           <div class="p-4">
-             <button onclick="clearAllData()" class="w-full flex items-center justify-center py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium"><i class="fas fa-trash-alt mr-2"></i> 清空所有資料</button>
+           <div class="p-4 space-y-3">
+             <button onclick="handleLogout()" class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-medium">
+                <i class="fas fa-sign-out-alt mr-2"></i> 登出帳號
+             </button>
+             <button onclick="clearAllData()" class="w-full flex items-center justify-center py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium">
+                <i class="fas fa-trash-alt mr-2"></i> 清空所有資料
+              </button>
            </div>
         </div>
       </div>
@@ -377,35 +313,31 @@
   </div>
 
   <!-- JavaScript 邏輯模組 -->
-  <script>
-    // ==========================================
-    // 🔒 密碼鎖設定
-    // ==========================================
-    const TARGET_HASH = 1625059299;
-    function generateHash(str) {
-      return str.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0);
-    }
-    function checkPassword() {
-      const input = document.getElementById('lock-password').value;
-      if (generateHash(input) === TARGET_HASH) {
-        sessionStorage.setItem('app_unlocked', 'true');
-        const lockScreen = document.getElementById('lock-screen');
-        lockScreen.classList.add('opacity-0', 'pointer-events-none');
-        setTimeout(() => { lockScreen.style.display = 'none'; }, 300);
-      } else {
-        const errorMsg = document.getElementById('lock-error');
-        errorMsg.classList.remove('opacity-0');
-        document.getElementById('lock-password').value = '';
-        setTimeout(() => { errorMsg.classList.add('opacity-0'); }, 2000);
-      }
-    }
-    document.getElementById('lock-password').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkPassword(); });
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // ==========================================
-    // ⚠️ 基礎定義與初始化
+    // ⚙️ Firebase 與全域變數初始化
     // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDl3IYAAQGCwKLaSVGdY4ewZZlhVmu7dUg",
+      authDomain: "book-dad94.firebaseapp.com",
+      projectId: "book-dad94",
+      storageBucket: "book-dad94.firebasestorage.app",
+      messagingSenderId: "9435949525",
+      appId: "1:9435949525:web:979b0a1afea30e40fcb55c"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const googleProvider = new GoogleAuthProvider();
+
+    let currentUser = null, unsubscribeFirestore = null, unsubscribeCatFirestore = null, unsubscribeAssetFirestore = null, isSigningIn = false;
     const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
-    let tokenClient, backgroundCheckInterval = null, cloudHasUpdate = false;
+    let tokenClient;
 
     const ASSET_TYPES = {
       cash: { name: '現金', icon: 'fas fa-wallet', color: '#10B981', sign: 1 },
@@ -429,100 +361,143 @@
     ];
 
     let categories = [], records = [], assets = [];
-    let selectedCategoryId = null, currentTab = 'add';
-    let currentTxType = 'expense'; // 'expense', 'income', 'transfer'
-    let currentStatsType = 'expense'; // 'expense', 'income'
+    let selectedCategoryId = null, currentTab = 'add', currentTxType = 'expense', currentStatsType = 'expense';
     let currentSearchQuery = '', currentCategoryFilter = null, pieChartSlices = [];
 
-    function init() {
-      if (sessionStorage.getItem('app_unlocked') === 'true') document.getElementById('lock-screen').style.display = 'none';
-      else setTimeout(() => { const lockInput = document.getElementById('lock-password'); if (lockInput) lockInput.focus(); }, 100);
-
-      try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; }
-      categories.forEach(c => { if(!c.type) c.type = 'expense'; });
-      if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
-
-      try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; }
-      if(assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
-
-      try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; }
-      records.forEach(r => {
-         if(!r.type) r.type = (r.cat === 'transfer') ? 'transfer' : 'expense';
-         if(!r.assetId && r.type !== 'transfer') r.assetId = assets[0].id;
-      });
-
-      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
-      
-      renderAssetSelects();
-      setTxType('expense');
-      initDateFilters(true);
-      checkTokenStatus();
-
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkTokenStatus(); else stopBackgroundCheck(); });
-      window.addEventListener('focus', () => { const token = localStorage.getItem('gdrive_token'); if (token) checkCloudUpdate(token); });
-      initCanvasClickListener();
-      initSwipeGestures();
-    }
-
     // ==========================================
-    // 💼 資產與紀錄邏輯 (Assets & Records)
+    // 🔒 認證與登入邏輯
     // ==========================================
-    window.renderAssetSelects = () => {
-        const options = assets.map(a => `<option value="${a.id}">${a.name} ($${a.balance.toLocaleString()})</option>`).join('');
-        document.getElementById('input-asset').innerHTML = options;
-        document.getElementById('input-asset-from').innerHTML = options;
-        document.getElementById('input-asset-to').innerHTML = options;
+    window.signInWithGoogle = async () => {
+       if (isSigningIn) return; isSigningIn = true;
+       const errorEl = document.getElementById('auth-error'), btnEl = document.getElementById('auth-submit-btn'), btnText = document.getElementById('auth-btn-text');
+       if (errorEl) errorEl.classList.add('opacity-0');
+       if (btnEl) btnEl.classList.add('opacity-50', 'pointer-events-none'); 
+       if (btnText) btnText.innerText = '登入中...';
+       try {
+           googleProvider.setCustomParameters({ prompt: 'select_account' });
+           const result = await signInWithPopup(auth, googleProvider);
+           if (result && result.user) {
+               document.getElementById('auth-screen').classList.add('opacity-0', 'pointer-events-none');
+               setTimeout(() => { document.getElementById('auth-screen').style.display = 'none'; }, 300);
+           }
+       } catch (error) {
+           if (error.code !== 'auth/popup-closed-by-user' && error.code !== 'auth/cancelled-popup-request') {
+               if (errorEl) { errorEl.innerText = `發生錯誤 (${error.code})。`; errorEl.classList.remove('opacity-0'); }
+           }
+       } finally {
+           isSigningIn = false;
+           if (btnEl) btnEl.classList.remove('opacity-50', 'pointer-events-none');
+           if (btnText) btnText.innerText = '使用 Google 帳號登入';
+       }
     };
 
-    window.renderAssetsView = () => {
-       let netWorth = 0;
-       assets.forEach(a => { const sign = ASSET_TYPES[a.type]?.sign || 1; netWorth += a.balance * sign; });
-       document.getElementById('total-net-worth').innerText = `$${netWorth.toLocaleString()}`;
+    window.handleLogout = async () => { await signOut(auth); window.showToast('已登出帳號'); };
 
-       const list = document.getElementById('assets-list');
-       if(assets.length === 0) { list.innerHTML = '<div class="text-center text-gray-400 py-10 text-sm">尚無資產項目</div>'; return; }
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      const statusEl = document.getElementById('firebase-status'), authScreen = document.getElementById('auth-screen');
+      if (user) {
+        if(statusEl) {
+            statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
+            statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all";
+        }
+        if(authScreen) {
+            authScreen.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => { authScreen.style.display = 'none'; }, 300);
+        }
+        setupFirestoreListener();
+      } else {
+        if(statusEl) {
+            statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>離線</span>';
+            statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm transition-all";
+        }
+        if(authScreen) {
+            authScreen.style.display = 'flex'; void authScreen.offsetWidth; authScreen.classList.remove('opacity-0', 'pointer-events-none');
+        }
+        records = []; document.getElementById('history-list').innerHTML = '';
+        if (unsubscribeFirestore) unsubscribeFirestore(); 
+        if (unsubscribeCatFirestore) unsubscribeCatFirestore();
+        if (unsubscribeAssetFirestore) unsubscribeAssetFirestore();
+      }
+    });
 
-       list.innerHTML = assets.map(a => {
-           const typeInfo = ASSET_TYPES[a.type] || ASSET_TYPES['cash'];
-           return `
-             <div onclick="openAssetModal('${a.id}')" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between cursor-pointer hover:border-blue-200 transition-colors">
-                <div class="flex items-center space-x-4">
-                  <div class="w-10 h-10 rounded-full flex items-center justify-center text-white" style="background-color: ${typeInfo.color}"><i class="${typeInfo.icon} text-lg"></i></div>
-                  <div><div class="font-bold text-gray-800 text-sm">${a.name}</div><div class="text-[10px] text-gray-400">${typeInfo.name}</div></div>
-                </div>
-                <div class="text-right font-bold text-lg text-gray-800">$${a.balance.toLocaleString()}</div>
-             </div>`;
-       }).join('');
+    function setupFirestoreListener() {
+      if (!currentUser) return;
+      unsubscribeFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), (docSnap) => {
+        if (docSnap.exists() && docSnap.data().list) {
+            records = docSnap.data().list.map(r => { r.date = r.date || new Date().toISOString().split('T')[0]; return r; }).sort((a, b) => new Date(b.date) - new Date(a.date));
+            localStorage.setItem('my_expenses', JSON.stringify(records));
+            window.initDateFilters(); if (currentTab === 'stats') window.updateStatsView();
+        } else { window.syncExpensesToCloud(); }
+      });
+      unsubscribeCatFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'settings', 'categories'), (docSnap) => {
+        if (docSnap.exists() && docSnap.data().list && Array.isArray(docSnap.data().list) && docSnap.data().list.length > 0) {
+            categories = docSnap.data().list; localStorage.setItem('my_categories', JSON.stringify(categories));
+            window.renderCategories(); window.renderSettingsCategories(); if (currentTab === 'stats') window.updateStatsView();
+        } else { window.syncCategoriesToCloud(); }
+      });
+      unsubscribeAssetFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'sync', 'assets'), (docSnap) => {
+        if (docSnap.exists() && docSnap.data().list && Array.isArray(docSnap.data().list) && docSnap.data().list.length > 0) {
+            assets = docSnap.data().list; localStorage.setItem('my_assets', JSON.stringify(assets));
+            window.renderAssetSelects(); if (currentTab === 'assets') window.renderAssetsView();
+        } else { window.syncAssetsToCloud(); }
+      });
+    }
+
+    window.syncCategoriesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'categories'), { list: categories }); } catch(e){} };
+    window.syncExpensesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), { list: records }); } catch(e){} };
+    window.syncAssetsToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'assets'), { list: assets }); } catch(e){} };
+
+    // ==========================================
+    // 💼 核心視圖邏輯
+    // ==========================================
+    window.showToast = (msg) => { const toast = document.getElementById('toast'); document.getElementById('toast-msg').innerText = msg; toast.classList.remove('opacity-0'); setTimeout(() => toast.classList.add('opacity-0'), 2000); };
+    window.switchTab = (tab) => {
+      currentTab = tab;
+      ['add', 'stats', 'assets', 'settings'].forEach(t => document.getElementById(`view-${t}`).classList.add('hidden'));
+      document.getElementById(`view-${tab}`).classList.remove('hidden');
+      document.querySelectorAll('nav button').forEach(b => { b.classList.remove('text-blue-600'); b.classList.add('text-gray-400'); });
+      document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
+      if(tab === 'stats') window.updateStatsView();
+      if(tab === 'assets') window.renderAssetsView();
+      if(tab === 'settings') window.renderSettingsCategories();
     };
 
     window.setTxType = (type) => {
       currentTxType = type;
       ['expense', 'income', 'transfer'].forEach(t => {
          const btn = document.getElementById(`btn-type-${t}`);
-         if(t === type) btn.className = 'flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors bg-white shadow-sm text-gray-800';
-         else btn.className = 'flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors text-gray-500';
+         btn.className = (t === type) ? 'flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors bg-white shadow-sm text-gray-800' : 'flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors text-gray-500';
       });
-
       if (type === 'transfer') {
-         document.getElementById('category-section').classList.add('hidden');
-         document.getElementById('asset-single-section').classList.add('hidden');
-         document.getElementById('asset-transfer-section').classList.remove('hidden');
+         document.getElementById('category-section').classList.add('hidden'); document.getElementById('asset-single-section').classList.add('hidden'); document.getElementById('asset-transfer-section').classList.remove('hidden');
       } else {
-         document.getElementById('category-section').classList.remove('hidden');
-         document.getElementById('asset-single-section').classList.remove('hidden');
-         document.getElementById('asset-transfer-section').classList.add('hidden');
-         renderCategories(); 
+         document.getElementById('category-section').classList.remove('hidden'); document.getElementById('asset-single-section').classList.remove('hidden'); document.getElementById('asset-transfer-section').classList.add('hidden');
+         window.renderCategories(); 
       }
+    };
+
+    window.renderAssetSelects = () => {
+        const options = assets.map(a => `<option value="${a.id}">${a.name} ($${a.balance.toLocaleString()})</option>`).join('');
+        document.getElementById('input-asset').innerHTML = options; document.getElementById('input-asset-from').innerHTML = options; document.getElementById('input-asset-to').innerHTML = options;
+    };
+
+    window.renderAssetsView = () => {
+       let netWorth = 0;
+       assets.forEach(a => { const sign = ASSET_TYPES[a.type]?.sign || 1; netWorth += a.balance * sign; });
+       document.getElementById('total-net-worth').innerText = `$${netWorth.toLocaleString()}`;
+       const list = document.getElementById('assets-list');
+       if(assets.length === 0) { list.innerHTML = '<div class="text-center text-gray-400 py-10 text-sm">尚無資產項目</div>'; return; }
+       list.innerHTML = assets.map(a => {
+           const typeInfo = ASSET_TYPES[a.type] || ASSET_TYPES['cash'];
+           return `<div onclick="window.openAssetModal('${a.id}')" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between cursor-pointer hover:border-blue-200 transition-colors"><div class="flex items-center space-x-4"><div class="w-10 h-10 rounded-full flex items-center justify-center text-white" style="background-color: ${typeInfo.color}"><i class="${typeInfo.icon} text-lg"></i></div><div><div class="font-bold text-gray-800 text-sm">${a.name}</div><div class="text-[10px] text-gray-400">${typeInfo.name}</div></div></div><div class="text-right font-bold text-lg text-gray-800">$${a.balance.toLocaleString()}</div></div>`;
+       }).join('');
     };
 
     window.renderCategories = () => {
         const container = document.getElementById('category-container'); if(!container) return;
         const filteredCats = categories.filter(c => c.type === currentTxType);
-        container.innerHTML = filteredCats.map(cat => `
-          <button onclick="selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}">
-            <div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280"><i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">${cat.name}</span>
-          </button>`).join('');
-          
+        container.innerHTML = filteredCats.map(cat => `<button onclick="window.selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}"><div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280"><i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">${cat.name}</span></button>`).join('');
         if(!filteredCats.find(c => c.id === selectedCategoryId)) selectedCategoryId = filteredCats[0]?.id;
         if(selectedCategoryId) window.selectCategory(selectedCategoryId);
     };
@@ -532,74 +507,45 @@
       document.querySelectorAll('.cat-btn').forEach(btn => {
         const cat = categories.find(c => c.id === btn.dataset.id); if(!cat) return;
         const iw = btn.querySelector('.icon-wrap'), ts = btn.querySelector('span');
-        if(cat.id === id) {
-          btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-blue-50 border-blue-500`;
-          iw.style.cssText = `background-color: ${cat.color}; color: white`; ts.className = `text-[10px] transition-colors font-bold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`;
-        } else {
-          btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent hover:bg-gray-100`;
-          iw.style.cssText = `background-color: #E5E7EB; color: #6B7280`; ts.className = `text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`;
-        }
+        if(cat.id === id) { btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-blue-50 border-blue-500`; iw.style.cssText = `background-color: ${cat.color}; color: white`; ts.className = `text-[10px] transition-colors font-bold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`; } 
+        else { btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent hover:bg-gray-100`; iw.style.cssText = `background-color: #E5E7EB; color: #6B7280`; ts.className = `text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`; }
       });
     };
 
     window.addRecord = () => {
       const amount = Number(document.getElementById('input-amount').value);
-      if(!amount || amount <= 0) return showToast('請輸入有效的金額！');
-
+      if(!amount || amount <= 0) return window.showToast('請輸入有效的金額！');
       const record = { id: Date.now().toString(), type: currentTxType, amount, date: document.getElementById('input-date').value, note: document.getElementById('input-note').value.trim() };
-
       if (currentTxType === 'expense' || currentTxType === 'income') {
-         record.cat = selectedCategoryId;
-         record.assetId = document.getElementById('input-asset').value;
-         const a = assets.find(x => x.id === record.assetId);
-         if(a) a.balance += (currentTxType === 'income' ? amount : -amount);
+         record.cat = selectedCategoryId; record.assetId = document.getElementById('input-asset').value;
+         const a = assets.find(x => x.id === record.assetId); if(a) a.balance += (currentTxType === 'income' ? amount : -amount);
       } else if (currentTxType === 'transfer') {
-         record.assetFrom = document.getElementById('input-asset-from').value;
-         record.assetTo = document.getElementById('input-asset-to').value;
-         if (record.assetFrom === record.assetTo) return showToast('轉出與轉入資產不可相同');
-         const aF = assets.find(x => x.id === record.assetFrom);
-         const aT = assets.find(x => x.id === record.assetTo);
-         if(aF) aF.balance -= amount;
-         if(aT) aT.balance += amount;
+         record.assetFrom = document.getElementById('input-asset-from').value; record.assetTo = document.getElementById('input-asset-to').value;
+         if (record.assetFrom === record.assetTo) return window.showToast('轉出與轉入資產不可相同');
+         const aF = assets.find(x => x.id === record.assetFrom), aT = assets.find(x => x.id === record.assetTo);
+         if(aF) aF.balance -= amount; if(aT) aT.balance += amount;
       }
-
-      records.push(record);
-      records.sort((a, b) => new Date(b.date) - new Date(a.date));
-      
-      localStorage.setItem('my_expenses', JSON.stringify(records));
-      localStorage.setItem('my_assets', JSON.stringify(assets));
-      
-      document.getElementById('input-amount').value = '';
-      document.getElementById('input-note').value = '';
-      
-      initDateFilters(); 
-      renderAssetSelects();
-      if(currentTab === 'assets') renderAssetsView();
-      showToast('✅ 記帳成功！');
-      executeDriveUpload(true);
+      records.push(record); records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets));
+      document.getElementById('input-amount').value = ''; document.getElementById('input-note').value = '';
+      window.initDateFilters(); window.renderAssetSelects(); if(currentTab === 'assets') window.renderAssetsView(); window.showToast('✅ 記帳成功！');
+      window.syncExpensesToCloud(); window.syncAssetsToCloud();
     };
 
     window.updateRecordField = (id, field, value) => {
       const index = records.findIndex(r => r.id === id); if (index === -1) return;
       const r = records[index];
-
       if (field === 'amount') {
-          value = Number(value);
-          if (!value || value <= 0) { showToast('無效金額'); updateStatsView(); return; }
+          value = Number(value); if (!value || value <= 0) { window.showToast('無效金額'); window.updateStatsView(); return; }
           const diff = value - r.amount;
           if (r.type === 'expense') { const a = assets.find(x => x.id === r.assetId); if (a) a.balance -= diff; } 
           else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a) a.balance += diff; } 
           else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF) aF.balance -= diff; if (aT) aT.balance += diff; }
-          localStorage.setItem('my_assets', JSON.stringify(assets));
+          localStorage.setItem('my_assets', JSON.stringify(assets)); window.syncAssetsToCloud();
       } else if (field === 'note') value = value.trim();
-
-      r[field] = value;
-      if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-      localStorage.setItem('my_expenses', JSON.stringify(records));
-      updateStatsView(); renderAssetSelects();
-      showToast('✅ 紀錄已自動儲存');
-      executeDriveUpload(true);
+      r[field] = value; if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud();
+      window.updateStatsView(); window.renderAssetSelects(); window.showToast('✅ 紀錄已自動儲存');
     };
 
     window.deleteRecord = (id) => {
@@ -609,35 +555,16 @@
          if (r.type === 'expense') { const a = assets.find(x => x.id === r.assetId); if (a) a.balance += r.amount; } 
          else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a) a.balance -= r.amount; } 
          else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF) aF.balance += r.amount; if (aT) aT.balance -= r.amount; }
-         localStorage.setItem('my_assets', JSON.stringify(assets));
+         localStorage.setItem('my_assets', JSON.stringify(assets)); window.syncAssetsToCloud();
       }
-      records = records.filter(x => x.id !== id);
-      localStorage.setItem('my_expenses', JSON.stringify(records));
-      initDateFilters(); updateStatsView(); renderAssetSelects();
-      showToast('已刪除紀錄'); executeDriveUpload(true);
+      records = records.filter(x => x.id !== id); localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud();
+      window.initDateFilters(); window.updateStatsView(); window.renderAssetSelects(); window.showToast('已刪除紀錄');
     };
 
     // ==========================================
-    // 📊 統計與視圖 (Stats & View)
+    // 📊 統計視圖邏輯
     // ==========================================
-    window.switchTab = (tab) => {
-      currentTab = tab;
-      ['add', 'stats', 'assets', 'settings'].forEach(t => document.getElementById(`view-${t}`).classList.add('hidden'));
-      document.getElementById(`view-${tab}`).classList.remove('hidden');
-      document.querySelectorAll('nav button').forEach(b => { b.classList.remove('text-blue-600'); b.classList.add('text-gray-400'); });
-      document.getElementById(`nav-${tab}`).classList.replace('text-gray-400', 'text-blue-600');
-      if(tab === 'stats') updateStatsView();
-      if(tab === 'assets') renderAssetsView();
-      if(tab === 'settings') renderSettingsCategories();
-      const token = localStorage.getItem('gdrive_token'); if (token) checkCloudUpdate(token);
-    };
-
-    window.setStatsType = (type) => {
-        currentStatsType = type;
-        document.getElementById('stats-type-expense').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'expense' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`;
-        document.getElementById('stats-type-income').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'income' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`;
-        updateStatsView();
-    };
+    window.setStatsType = (type) => { currentStatsType = type; document.getElementById('stats-type-expense').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'expense' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; document.getElementById('stats-type-income').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'income' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; window.updateStatsView(); };
 
     window.initDateFilters = (isFirstLoad = false) => {
       const yearSelect = document.getElementById('filter-year'), monthSelect = document.getElementById('filter-month');
@@ -654,9 +581,7 @@
       if (selectedYear === 'all') { monthSelect.value = 'all'; monthSelect.disabled = true; monthSelect.classList.add('opacity-50', 'bg-gray-100'); } 
       else { monthSelect.disabled = false; monthSelect.classList.remove('opacity-50', 'bg-gray-100'); }
       
-      let filteredRecords = records;
-      let titleText = '累積總額';
-      
+      let filteredRecords = records, titleText = '累積總額';
       if (selectedYear !== 'all') {
           if (selectedMonth !== 'all') { filteredRecords = filteredRecords.filter(r => r.date.startsWith(`${selectedYear}-${selectedMonth}`)); titleText = `${selectedYear}年 ${parseInt(selectedMonth)}月`; } 
           else { filteredRecords = filteredRecords.filter(r => r.date.startsWith(selectedYear)); titleText = `${selectedYear}年`; }
@@ -669,26 +594,22 @@
              return (r.note && r.note.toLowerCase().includes(currentSearchQuery)) || catName.includes(currentSearchQuery);
           });
       }
-
       document.getElementById('stats-title-text').innerText = titleText;
       
-      // 依統計類型計算總額與圖表
-      let chartRecords = filteredRecords.filter(r => r.type === currentStatsType);
-      let total = 0; let totalsByCat = {};
+      let chartRecords = filteredRecords.filter(r => r.type === currentStatsType), total = 0, totalsByCat = {};
       chartRecords.forEach(r => { total += r.amount; totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; });
       document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
       
       const canvas = document.getElementById('pieChart'), ctx = canvas.getContext('2d'), cx = canvas.width/2, cy = canvas.height/2, radius = Math.min(cx, cy);
       ctx.clearRect(0, 0, canvas.width, canvas.height); pieChartSlices = [];
-      
       if(total === 0) {
         ctx.fillStyle = '#f3f4f6'; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.fill();
         document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
       } else {
-        let startAngle = -0.5 * Math.PI; let breakdownArr = [];
+        let startAngle = -0.5 * Math.PI, breakdownArr = [];
         categories.forEach(cat => {
           if(totalsByCat[cat.id]) {
-             const amount = totalsByCat[cat.id]; const sliceAngle = (amount / total) * 2 * Math.PI; const endAngle = startAngle + sliceAngle;
+             const amount = totalsByCat[cat.id], sliceAngle = (amount / total) * 2 * Math.PI, endAngle = startAngle + sliceAngle;
              ctx.fillStyle = cat.color; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
              pieChartSlices.push({ id: cat.id, startAngle, endAngle }); startAngle = endAngle;
              breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1) });
@@ -696,14 +617,9 @@
         });
         ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
         breakdownArr.sort((a,b) => b.amount - a.amount);
-        document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `
-          <div onclick="filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}">
-             <div class="flex items-center"><div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div><span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span></div>
-             <div class="flex items-center space-x-2"><span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span><span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span></div>
-          </div>`).join('');
+        document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `<div onclick="window.filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}"><div class="flex items-center"><div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div><span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span></div><div class="flex items-center space-x-2"><span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span><span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span></div></div>`).join('');
       }
 
-      // 列表顯示過濾後的該類型紀錄，以及全部移轉
       let listRecords = filteredRecords.filter(r => r.type === currentStatsType || r.type === 'transfer');
       if (currentCategoryFilter) listRecords = listRecords.filter(r => r.cat === currentCategoryFilter);
 
@@ -719,10 +635,8 @@
          const catOptionsTemplate = categories.filter(c => c.type === currentStatsType).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
          historyContainer.innerHTML = listRecords.map(r => {
            let catIconHtml = '', catSelectHtml = '', accountBadge = '';
-           
            if (r.type === 'transfer') {
-              const aF = assets.find(x => x.id === r.assetFrom)?.name || '?';
-              const aT = assets.find(x => x.id === r.assetTo)?.name || '?';
+              const aF = assets.find(x => x.id === r.assetFrom)?.name || '?'; const aT = assets.find(x => x.id === r.assetTo)?.name || '?';
               accountBadge = `<span class="bg-gray-200 px-1 rounded text-[8px] mr-1">${aF} ➔ ${aT}</span>`;
               catIconHtml = `<div class="p-3 rounded-full flex items-center justify-center bg-gray-100 text-gray-500"><i class="fas fa-exchange-alt text-sm"></i></div>`;
               catSelectHtml = `<span class="font-bold text-gray-800">資金移轉</span>`;
@@ -731,44 +645,19 @@
               const aName = assets.find(x => x.id === r.assetId)?.name || '?';
               accountBadge = `<span class="bg-gray-200 px-1 rounded text-[8px] mr-1">${aName}</span>`;
               const currentCatOptions = catOptionsTemplate.replace(`value="${cat.id}"`, `value="${cat.id}" selected`);
-              catIconHtml = `
-                <select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select>
-                <div class="p-3 rounded-full flex items-center justify-center transition-transform group-hover:scale-105" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>`;
-              catSelectHtml = `
-                <div class="relative cursor-pointer"><select onchange="updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>`;
+              catIconHtml = `<select onchange="window.updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><div class="p-3 rounded-full flex items-center justify-center transition-transform group-hover:scale-105" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>`;
+              catSelectHtml = `<div class="relative cursor-pointer"><select onchange="window.updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>`;
            }
-
-           return `
-             <div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative">
-               <div class="flex items-center space-x-3 w-[65%]">
-                 <div class="relative shrink-0" title="更換分類">${catIconHtml}</div>
-                 <div class="overflow-hidden flex-1">
-                   <div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${r.id.startsWith('INV') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div>
-                   <div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">
-                     ${accountBadge}
-                     <input type="date" value="${r.date}" onchange="updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10" title="修改日期">
-                     <span>•</span>
-                     <input type="text" value="${r.note}" placeholder="新增備註..." onchange="updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註">
-                   </div>
-                 </div>
-               </div>
-               <div class="flex items-center justify-end space-x-1 w-[35%]">
-                 <span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span>
-                 <input type="number" value="${r.amount}" onchange="updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10" title="修改金額" inputmode="numeric">
-                 <button onclick="deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button>
-               </div>
-             </div>`;
+           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative"><div class="flex items-center space-x-3 w-[65%]"><div class="relative shrink-0" title="更換分類">${catIconHtml}</div><div class="overflow-hidden flex-1"><div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${r.id.startsWith('INV') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div><div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">${accountBadge}<input type="date" value="${r.date}" onchange="window.updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10" title="修改日期"><span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="window.updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註"></div></div></div><div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span><input type="number" value="${r.amount}" onchange="window.updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10" title="修改金額" inputmode="numeric"><button onclick="window.deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button></div></div>`;
          }).join('');
       }
     };
-
-    window.handleSearch = () => { currentSearchQuery = document.getElementById('input-search').value.toLowerCase(); updateStatsView(); };
-    window.clearCategoryFilter = () => { currentCategoryFilter = null; document.getElementById('btn-clear-filter').classList.add('hidden'); updateStatsView(); };
-    window.filterByCategory = (catId) => { if (currentCategoryFilter === catId) clearCategoryFilter(); else { currentCategoryFilter = catId; document.getElementById('btn-clear-filter').classList.remove('hidden'); updateStatsView(); } };
+    window.handleSearch = () => { currentSearchQuery = document.getElementById('input-search').value.toLowerCase(); window.updateStatsView(); };
+    window.clearCategoryFilter = () => { currentCategoryFilter = null; document.getElementById('btn-clear-filter').classList.add('hidden'); window.updateStatsView(); };
+    window.filterByCategory = (catId) => { if (currentCategoryFilter === catId) window.clearCategoryFilter(); else { currentCategoryFilter = catId; document.getElementById('btn-clear-filter').classList.remove('hidden'); window.updateStatsView(); } };
 
     window.initSwipeGestures = () => {
-        const statsView = document.getElementById('view-stats'); let touchStartX = 0, touchStartY = 0;
-        if (!statsView) return;
+        const statsView = document.getElementById('view-stats'); let touchStartX = 0, touchStartY = 0; if (!statsView) return;
         statsView.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }, {passive: true});
         statsView.addEventListener('touchend', e => {
             if (currentTab !== 'stats') return;
@@ -786,7 +675,7 @@
         if (!Array.from(yearSelect.options).some(opt => opt.value === y.toString())) { yearSelect.innerHTML += `<option value="${y}">${y}年</option>`; }
         yearSelect.value = y.toString(); monthSelect.value = mStr;
         const titleEl = document.getElementById('stats-title-text'); if (titleEl) { titleEl.classList.add('scale-105', 'text-yellow-200'); setTimeout(() => titleEl.classList.remove('scale-105', 'text-yellow-200'), 300); }
-        updateStatsView();
+        window.updateStatsView();
     };
 
     window.initCanvasClickListener = () => {
@@ -797,7 +686,7 @@
         if (distance > radius || distance < radius*0.6) return;
         let angle = Math.atan2(dy, dx); if (angle < -0.5*Math.PI) angle += 2*Math.PI;
         const clickedSlice = pieChartSlices.find(s => angle >= s.startAngle && angle <= s.endAngle);
-        if (clickedSlice) filterByCategory(clickedSlice.id);
+        if (clickedSlice) window.filterByCategory(clickedSlice.id);
       });
     };
 
@@ -808,34 +697,22 @@
         const modal = document.getElementById('asset-modal'), inner = modal.querySelector('div');
         modal.classList.remove('opacity-0', 'pointer-events-none'); inner.classList.remove('translate-y-full'); inner.classList.add('translate-y-0');
         if(id) {
-           const a = assets.find(x => x.id === id);
-           document.getElementById('asset-modal-title').innerText = '編輯資產'; document.getElementById('asset-id-input').value = a.id;
-           document.getElementById('asset-name-input').value = a.name; document.getElementById('asset-type-input').value = a.type;
-           document.getElementById('asset-balance-input').value = a.balance; document.getElementById('asset-delete-btn').classList.remove('hidden');
+           const a = assets.find(x => x.id === id); document.getElementById('asset-modal-title').innerText = '編輯資產'; document.getElementById('asset-id-input').value = a.id; document.getElementById('asset-name-input').value = a.name; document.getElementById('asset-type-input').value = a.type; document.getElementById('asset-balance-input').value = a.balance; document.getElementById('asset-delete-btn').classList.remove('hidden');
         } else {
-           document.getElementById('asset-modal-title').innerText = '新增資產'; document.getElementById('asset-id-input').value = '';
-           document.getElementById('asset-name-input').value = ''; document.getElementById('asset-type-input').value = 'cash';
-           document.getElementById('asset-balance-input').value = '0'; document.getElementById('asset-delete-btn').classList.add('hidden');
+           document.getElementById('asset-modal-title').innerText = '新增資產'; document.getElementById('asset-id-input').value = ''; document.getElementById('asset-name-input').value = ''; document.getElementById('asset-type-input').value = 'cash'; document.getElementById('asset-balance-input').value = '0'; document.getElementById('asset-delete-btn').classList.add('hidden');
         }
     };
     window.closeAssetModal = () => { const modal = document.getElementById('asset-modal'); modal.querySelector('div').classList.add('translate-y-full'); setTimeout(() => modal.classList.add('opacity-0', 'pointer-events-none'), 300); };
-
     window.saveAsset = () => {
-        const id = document.getElementById('asset-id-input').value, name = document.getElementById('asset-name-input').value.trim();
-        const type = document.getElementById('asset-type-input').value, balance = Number(document.getElementById('asset-balance-input').value) || 0;
-        if(!name) return showToast('請輸入資產名稱');
-        if(id) { const idx = assets.findIndex(x => x.id === id); if(idx !== -1) assets[idx] = { ...assets[idx], name, type, balance }; } 
-        else assets.push({ id: 'asset_' + Date.now(), name, type, balance });
-        localStorage.setItem('my_assets', JSON.stringify(assets)); renderAssetsView(); renderAssetSelects(); closeAssetModal(); showToast('✅ 資產已儲存'); executeDriveUpload(true);
+        const id = document.getElementById('asset-id-input').value, name = document.getElementById('asset-name-input').value.trim(), type = document.getElementById('asset-type-input').value, balance = Number(document.getElementById('asset-balance-input').value) || 0;
+        if(!name) return window.showToast('請輸入資產名稱');
+        if(id) { const idx = assets.findIndex(x => x.id === id); if(idx !== -1) assets[idx] = { ...assets[idx], name, type, balance }; } else assets.push({ id: 'asset_' + Date.now(), name, type, balance });
+        localStorage.setItem('my_assets', JSON.stringify(assets)); window.renderAssetsView(); window.renderAssetSelects(); window.closeAssetModal(); window.showToast('✅ 資產已儲存'); window.syncAssetsToCloud();
     };
-
     window.deleteAsset = () => {
         const id = document.getElementById('asset-id-input').value; if(!id) return;
-        const isUsed = records.some(r => r.assetId === id || r.assetFrom === id || r.assetTo === id);
-        if(isUsed) { if(!confirm('此資產已有相關記帳紀錄，刪除後歷史紀錄將遺失對應帳戶，確定強制刪除？')) return; } 
-        else if(!confirm('確定要刪除此資產嗎？')) return;
-        assets = assets.filter(x => x.id !== id); localStorage.setItem('my_assets', JSON.stringify(assets));
-        renderAssetsView(); renderAssetSelects(); closeAssetModal(); showToast('已刪除資產'); executeDriveUpload(true);
+        if(records.some(r => r.assetId === id || r.assetFrom === id || r.assetTo === id)) { if(!confirm('此資產已有相關記帳紀錄，刪除後歷史紀錄將遺失對應帳戶，確定強制刪除？')) return; } else if(!confirm('確定要刪除此資產嗎？')) return;
+        assets = assets.filter(x => x.id !== id); localStorage.setItem('my_assets', JSON.stringify(assets)); window.renderAssetsView(); window.renderAssetSelects(); window.closeAssetModal(); window.showToast('已刪除資產'); window.syncAssetsToCloud();
     };
 
     const AVAILABLE_ICONS = ['fas fa-utensils', 'fas fa-tshirt', 'fas fa-home', 'fas fa-car', 'fas fa-book', 'fas fa-gamepad', 'fas fa-shopping-cart', 'fas fa-heart', 'fas fa-gift', 'fas fa-plane', 'fas fa-pills', 'fas fa-paw', 'fas fa-baby', 'fas fa-music', 'fas fa-laptop', 'fas fa-coffee', 'fas fa-camera', 'fas fa-dumbbell', 'fas fa-ellipsis-h', 'fas fa-hand-holding-usd', 'fas fa-coins'];
@@ -846,72 +723,40 @@
         const modal = document.getElementById('category-modal'), inner = modal.querySelector('div');
         modal.classList.remove('opacity-0', 'pointer-events-none'); inner.classList.remove('translate-y-full'); inner.classList.add('translate-y-0');
         if (catId) {
-            const cat = categories.find(c => c.id === catId); document.getElementById('cat-modal-title').innerText = '編輯分類';
-            document.getElementById('cat-id-input').value = cat.id; document.getElementById('cat-type-input').value = cat.type; 
-            document.getElementById('cat-name-input').value = cat.name; document.getElementById('cat-keywords-input').value = (cat.keywords||[]).join(', ');
-            selectedIconForCat = cat.icon; selectedColorForCat = cat.color; document.getElementById('cat-delete-btn').classList.toggle('hidden', cat.id === 'other');
+            const cat = categories.find(c => c.id === catId); document.getElementById('cat-modal-title').innerText = '編輯分類'; document.getElementById('cat-id-input').value = cat.id; document.getElementById('cat-type-input').value = cat.type; document.getElementById('cat-name-input').value = cat.name; document.getElementById('cat-keywords-input').value = (cat.keywords||[]).join(', '); selectedIconForCat = cat.icon; selectedColorForCat = cat.color; document.getElementById('cat-delete-btn').classList.toggle('hidden', cat.id === 'other');
         } else {
-            document.getElementById('cat-modal-title').innerText = '新增分類'; document.getElementById('cat-id-input').value = ''; document.getElementById('cat-type-input').value = 'expense';
-            document.getElementById('cat-name-input').value = ''; document.getElementById('cat-keywords-input').value = '';
-            selectedIconForCat = AVAILABLE_ICONS[0]; selectedColorForCat = AVAILABLE_COLORS[0]; document.getElementById('cat-delete-btn').classList.add('hidden');
+            document.getElementById('cat-modal-title').innerText = '新增分類'; document.getElementById('cat-id-input').value = ''; document.getElementById('cat-type-input').value = 'expense'; document.getElementById('cat-name-input').value = ''; document.getElementById('cat-keywords-input').value = ''; selectedIconForCat = AVAILABLE_ICONS[0]; selectedColorForCat = AVAILABLE_COLORS[0]; document.getElementById('cat-delete-btn').classList.add('hidden');
         }
-        renderCatModalPickers();
+        window.renderCatModalPickers();
     };
-
     window.closeCategoryModal = () => { const modal = document.getElementById('category-modal'); modal.querySelector('div').classList.add('translate-y-full'); setTimeout(() => { modal.classList.add('opacity-0', 'pointer-events-none'); }, 300); };
-    window.renderCatModalPickers = () => {
-       document.getElementById('cat-icon-picker').innerHTML = AVAILABLE_ICONS.map(i => `<button onclick="selectModalIcon('${i}')" class="w-10 h-10 rounded-full border-2 ${selectedIconForCat===i ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-transparent bg-gray-100 text-gray-500'}"><i class="${i}"></i></button>`).join('');
-       document.getElementById('cat-color-picker').innerHTML = AVAILABLE_COLORS.map(c => `<button onclick="selectModalColor('${c}')" class="w-8 h-8 rounded-full border-2 ${selectedColorForCat===c ? 'border-gray-800 scale-110' : 'border-transparent'}" style="background-color: ${c}">${selectedColorForCat===c ? '<i class="fas fa-check text-white text-xs"></i>' : ''}</button>`).join('');
-    };
-    window.selectModalIcon = (icon) => { selectedIconForCat = icon; renderCatModalPickers(); };
-    window.selectModalColor = (color) => { selectedColorForCat = color; renderCatModalPickers(); };
-
+    window.renderCatModalPickers = () => { document.getElementById('cat-icon-picker').innerHTML = AVAILABLE_ICONS.map(i => `<button onclick="window.selectModalIcon('${i}')" class="w-10 h-10 rounded-full border-2 ${selectedIconForCat===i ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-transparent bg-gray-100 text-gray-500'}"><i class="${i}"></i></button>`).join(''); document.getElementById('cat-color-picker').innerHTML = AVAILABLE_COLORS.map(c => `<button onclick="window.selectModalColor('${c}')" class="w-8 h-8 rounded-full border-2 ${selectedColorForCat===c ? 'border-gray-800 scale-110' : 'border-transparent'}" style="background-color: ${c}">${selectedColorForCat===c ? '<i class="fas fa-check text-white text-xs"></i>' : ''}</button>`).join(''); };
+    window.selectModalIcon = (icon) => { selectedIconForCat = icon; window.renderCatModalPickers(); }; window.selectModalColor = (color) => { selectedColorForCat = color; window.renderCatModalPickers(); };
     window.saveCategory = () => {
-        const idInput = document.getElementById('cat-id-input').value, name = document.getElementById('cat-name-input').value.trim(), type = document.getElementById('cat-type-input').value;
-        if(!name) return showToast('請輸入名稱');
-        const keywords = document.getElementById('cat-keywords-input').value.split(',').map(k=>k.trim()).filter(k=>k);
-        if (idInput) { const idx = categories.findIndex(c => c.id === idInput); if(idx!==-1) categories[idx] = { ...categories[idx], name, type, icon: selectedIconForCat, color: selectedColorForCat, keywords }; } 
-        else categories.push({ id: 'cat_' + Date.now(), name, type, icon: selectedIconForCat, color: selectedColorForCat, keywords });
-        localStorage.setItem('my_categories', JSON.stringify(categories));
-        renderCategories(); renderSettingsCategories(); if(currentTab === 'stats') updateStatsView(); closeCategoryModal(); showToast('✅ 儲存成功'); executeDriveUpload(true);
+        const idInput = document.getElementById('cat-id-input').value, name = document.getElementById('cat-name-input').value.trim(), type = document.getElementById('cat-type-input').value; if(!name) return window.showToast('請輸入名稱'); const keywords = document.getElementById('cat-keywords-input').value.split(',').map(k=>k.trim()).filter(k=>k);
+        if (idInput) { const idx = categories.findIndex(c => c.id === idInput); if(idx!==-1) categories[idx] = { ...categories[idx], name, type, icon: selectedIconForCat, color: selectedColorForCat, keywords }; } else categories.push({ id: 'cat_' + Date.now(), name, type, icon: selectedIconForCat, color: selectedColorForCat, keywords });
+        localStorage.setItem('my_categories', JSON.stringify(categories)); window.renderCategories(); window.renderSettingsCategories(); if(currentTab === 'stats') window.updateStatsView(); window.closeCategoryModal(); window.showToast('✅ 儲存成功'); window.syncCategoriesToCloud();
     };
-
     window.deleteCurrentCategory = () => {
         const idInput = document.getElementById('cat-id-input').value; if(!idInput || idInput === 'other' || !confirm('確定刪除？')) return;
-        categories = categories.filter(c => c.id !== idInput); let changed = false;
-        records.forEach(r => { if(r.cat === idInput) { r.cat = 'other'; changed = true; } });
-        localStorage.setItem('my_categories', JSON.stringify(categories));
-        if (changed) localStorage.setItem('my_expenses', JSON.stringify(records));
-        renderCategories(); renderSettingsCategories(); if(currentTab === 'stats') updateStatsView(); closeCategoryModal(); showToast('✅ 已刪除'); executeDriveUpload(true);
+        categories = categories.filter(c => c.id !== idInput); let changed = false; records.forEach(r => { if(r.cat === idInput) { r.cat = 'other'; changed = true; } });
+        localStorage.setItem('my_categories', JSON.stringify(categories)); if (changed) { localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud(); }
+        window.renderCategories(); window.renderSettingsCategories(); if(currentTab === 'stats') window.updateStatsView(); window.closeCategoryModal(); window.showToast('✅ 已刪除'); window.syncCategoriesToCloud();
     };
-
-    window.renderSettingsCategories = () => {
-        document.getElementById('settings-category-list').innerHTML = categories.map(cat => `
-          <div onclick="openCategoryModal('${cat.id}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 border border-transparent hover:border-blue-200">
-             <div class="flex items-center space-x-3">
-               <div class="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0" style="background-color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>
-               <div class="overflow-hidden">
-                 <div class="text-sm font-bold text-gray-800">${cat.name} <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded ${cat.type==='income'?'bg-green-100 text-green-600':'bg-red-100 text-red-600'}">${cat.type==='income'?'收入':'支出'}</span></div>
-                 <div class="text-[10px] text-gray-500 w-48 truncate">${(cat.keywords||[]).join(', ') || '無關鍵字'}</div>
-               </div>
-             </div>
-             <i class="fas fa-edit text-gray-400 text-xs shrink-0"></i>
-          </div>`).join('');
-    };
+    window.renderSettingsCategories = () => { document.getElementById('settings-category-list').innerHTML = categories.map(cat => `<div onclick="window.openCategoryModal('${cat.id}')" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 border border-transparent hover:border-blue-200"><div class="flex items-center space-x-3"><div class="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0" style="background-color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div><div class="overflow-hidden"><div class="text-sm font-bold text-gray-800">${cat.name} <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded ${cat.type==='income'?'bg-green-100 text-green-600':'bg-red-100 text-red-600'}">${cat.type==='income'?'收入':'支出'}</span></div><div class="text-[10px] text-gray-500 w-48 truncate">${(cat.keywords||[]).join(', ') || '無關鍵字'}</div></div></div><i class="fas fa-edit text-gray-400 text-xs shrink-0"></i></div>`).join(''); };
 
     // ==========================================
-    // ☁️ Google Drive 同步與發票處理
+    // ☁️ 發票與進階備份邏輯
     // ==========================================
     window.autoCategorize = (shopName) => { const name = shopName.toLowerCase(); for (const cat of categories) { if (cat.keywords?.some(kw => name.includes(kw.toLowerCase()))) return cat.id; } return 'other'; };
     window.parseCSVLine = (line) => { const res = []; let cur = '', inQ = false; for(let i=0;i<line.length;i++){ const c = line[i]; if(inQ){ if(c==='"' && line[i+1]==='"'){ cur+='"'; i++; } else if(c==='"') inQ = false; else cur+=c; } else { if(c==='"') inQ=true; else if(c===','){ res.push(cur); cur=''; } else cur+=c; } } res.push(cur); return res.map(v=>v.trim()); };
-
     window.importInvoiceCSV = (event) => {
       const file = event.target.files[0]; if(!file) return; const reader = new FileReader();
       reader.onload = (e) => {
         try {
           const lines = e.target.result.split(/\r?\n/).filter(l => l.trim()), invoiceMap = new Map(); let newC = 0, skipC = 0;
           for(let i=1;i<lines.length;i++) {
-             const cols = parseCSVLine(lines[i]); if(cols.length < 8) continue;
+             const cols = window.parseCSVLine(lines[i]); if(cols.length < 8) continue;
              const invNum = cols[2], amt = parseInt(cols[3]); if(!invNum?.match(/^[A-Z0-9]{2}\d{8}$/) || isNaN(amt)) continue;
              if(!invoiceMap.has(invNum)) invoiceMap.set(invNum, { dateRaw: cols[1], amount: amt, shopName: cols[7], items: cols[13]?[cols[13]]:[] });
              else { const d = invoiceMap.get(invNum); if(cols[13] && !d.items.includes(cols[13])) d.items.push(cols[13]); if(amt > d.amount) d.amount = amt; }
@@ -919,79 +764,36 @@
           invoiceMap.forEach((d, invNum) => {
               const formattedDate = d.dateRaw.includes('/') ? d.dateRaw.replace(/\//g, '-') : (d.dateRaw.length===8 ? `${d.dateRaw.substring(0,4)}-${d.dateRaw.substring(4,6)}-${d.dateRaw.substring(6,8)}` : new Date().toISOString().split('T')[0]);
               if(!records.some(r => r.id === `INV_${invNum}`)) { 
-                  const rec = { id: `INV_${invNum}`, type: 'expense', amount: d.amount, cat: autoCategorize(d.shopName), assetId: assets[0]?.id || 'asset_cash', date: formattedDate, note: `${d.shopName}${d.items.length ? ` (${d.items.slice(0,2).join('、')}${d.items.length>2?'...':''})` : ''}` };
-                  records.push(rec); newC++; 
-                  if(assets[0]) assets[0].balance -= d.amount; // 預設扣除現金
+                  const rec = { id: `INV_${invNum}`, type: 'expense', amount: d.amount, cat: window.autoCategorize(d.shopName), assetId: assets[0]?.id || 'asset_cash', date: formattedDate, note: `${d.shopName}${d.items.length ? ` (${d.items.slice(0,2).join('、')}${d.items.length>2?'...':''})` : ''}` };
+                  records.push(rec); newC++; if(assets[0]) assets[0].balance -= d.amount;
               } else skipC++;
           });
-          if(newC > 0) { 
-              records.sort((a,b)=>new Date(b.date)-new Date(a.date)); 
-              localStorage.setItem('my_expenses', JSON.stringify(records)); 
-              localStorage.setItem('my_assets', JSON.stringify(assets));
-              initDateFilters(); if(currentTab==='stats') updateStatsView(); showToast(`✅ 匯入 ${newC} 張新發票`); executeDriveUpload(true);
-          } else showToast(`⚠️ 無新發票`);
-        } catch(err) { showToast('❌ 解析失敗'); } event.target.value = ''; 
+          if(newC > 0) { records.sort((a,b)=>new Date(b.date)-new Date(a.date)); localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); if(currentTab==='stats') window.updateStatsView(); window.showToast(`✅ 匯入 ${newC} 張新發票`); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } else window.showToast(`⚠️ 無新發票`);
+        } catch(err) { window.showToast('❌ 解析失敗'); } event.target.value = ''; 
       }; reader.readAsText(file, 'UTF-8'); 
     };
 
-    window.initGoogleClient = () => { if(typeof google!=='undefined'&&google.accounts) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file', callback: async (t) => { if(t?.access_token) { localStorage.setItem('gdrive_token', t.access_token); localStorage.setItem('gdrive_token_expiry', Date.now() + 3500*1000); localStorage.setItem('gdrive_was_connected', 'true'); updateSyncUI(true); showToast('✅ 雲端連線成功！'); syncFromDrive(t.access_token); startBackgroundCheck(); } } }); checkTokenStatus(); };
-    window.checkTokenStatus = () => { const t = localStorage.getItem('gdrive_token'), exp = localStorage.getItem('gdrive_token_expiry'); if(t && exp && Date.now() < parseInt(exp)) { updateSyncUI(true); startBackgroundCheck(); } else { updateSyncUI(false); stopBackgroundCheck(); if(localStorage.getItem('gdrive_was_connected')==='true' && tokenClient) try{ tokenClient.requestAccessToken({prompt:'none'}); }catch(e){} } };
-    window.startBackgroundCheck = () => { stopBackgroundCheck(); if(document.visibilityState === 'visible') backgroundCheckInterval = setInterval(() => { const t = localStorage.getItem('gdrive_token'); if(t) checkCloudUpdate(t); }, 60000); };
-    window.stopBackgroundCheck = () => { if(backgroundCheckInterval) { clearInterval(backgroundCheckInterval); backgroundCheckInterval = null; } };
-    window.updateSyncUI = (ok) => { const btn = document.getElementById('btn-cloud-sync'), i = document.getElementById('cloud-icon'), txt = document.getElementById('cloud-sync-text'), lbl = document.getElementById('sync-status-label'); if(ok) { btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all"; i.className = "fas fa-cloud-check"; txt.innerText = "已連線"; const ls = localStorage.getItem('last_sync_time'); if(ls) lbl.innerText = `最後同步：${ls}`; } else { btn.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200 text-xs font-bold shadow-sm transition-all active:scale-95"; i.className = "fas fa-cloud"; txt.innerText = "未連線"; lbl.innerText = `尚未連線同步`; } };
-    window.handleCloudButtonClick = () => { const t = localStorage.getItem('gdrive_token'); if(t && cloudHasUpdate) syncFromDriveManual(); else if(!t) connectDrive(); else showToast('目前與雲端資料一致'); };
-    window.connectDrive = () => { if(GOOGLE_CLIENT_ID.includes('請在這裡貼上')) return alert('請先設定 GOOGLE_CLIENT_ID'); if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); };
+    window.exportData = () => { if(records.length===0 && assets.length===0) return window.showToast('無資料可匯出'); const a = document.createElement('a'); a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ version: 2, records, categories, assets })); a.download = `expense_backup_${new Date().toISOString().split('T')[0]}.json`; a.click(); window.showToast('✅ 備份下載成功'); };
+    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = imp; else { records = imp.records||[]; if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('✅ 還原成功'); window.syncExpensesToCloud(); window.syncCategoriesToCloud(); window.syncAssetsToCloud(); } catch(err){ window.showToast('❌ 格式錯誤'); } e.target.value = ''; }; r.readAsText(f); };
+    window.clearAllData = () => { if(confirm('警告：確定刪除所有資料？')) { records = []; assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; localStorage.removeItem('my_expenses'); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('已清空'); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } };
 
-    window.checkCloudUpdate = async (t) => { try { const id = localStorage.getItem('drive_file_id'); if(!id) return; const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=modifiedTime`, { headers: { 'Authorization': `Bearer ${t}` } }); if(!res.ok) return; const cm = new Date((await res.json()).modifiedTime).getTime(), lm = parseInt(localStorage.getItem('last_sync_timestamp')||'0'); if(cm > lm + 5000) { cloudHasUpdate = true; document.getElementById('cloud-update-dot').classList.remove('hidden'); } else { cloudHasUpdate = false; document.getElementById('cloud-update-dot').classList.add('hidden'); } } catch(e){} };
-    window.syncFromDriveManual = async () => { const t = localStorage.getItem('gdrive_token'); if(!t) return showToast('請先連線雲端'); showToast('⏳ 正在同步...'); await syncFromDrive(t); };
-    
-    window.syncFromDrive = async (t) => {
-      try {
-        const sr = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${SYNC_FILE_NAME}'&fields=files(id,name,modifiedTime)`, { headers: { 'Authorization': `Bearer ${t}` } });
-        const sd = await sr.json();
-        if(sd.files?.length) {
-          localStorage.setItem('drive_file_id', sd.files[0].id);
-          const cr = await fetch(`https://www.googleapis.com/drive/v3/files/${sd.files[0].id}?alt=media`, { headers: { 'Authorization': `Bearer ${t}` } });
-          const cloudData = await cr.json();
-          let cRec = [];
-          if(Array.isArray(cloudData)) cRec = cloudData; 
-          else { cRec = cloudData.records || []; if(cloudData.categories) categories = cloudData.categories; if(cloudData.assets) assets = cloudData.assets; }
-          
-          localStorage.setItem('my_categories', JSON.stringify(categories));
-          localStorage.setItem('my_assets', JSON.stringify(assets));
+    // Google Drive 備份支援(作為輔助)
+    window.initGoogleClient = () => { if(typeof google!=='undefined'&&google.accounts) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file', callback: async (t) => { if(t?.access_token) { localStorage.setItem('gdrive_token', t.access_token); window.showToast('✅ Drive 連線成功！'); } } }); };
+    window.syncFromDriveManual = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
+    window.executeDriveUpload = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
 
-          const lid = new Set(records.map(r=>r.id)), nC = cRec.filter(r=>!lid.has(r.id)), cid = new Set(cRec.map(r=>r.id)), nL = records.filter(r=>!cid.has(r.id));
-          if(nC.length || nL.length) {
-            records = [...records, ...nC].sort((a,b)=>new Date(b.date)-new Date(a.date));
-            localStorage.setItem('my_expenses', JSON.stringify(records));
-            const now = new Date(); localStorage.setItem('last_sync_timestamp', now.getTime()); localStorage.setItem('last_sync_time', now.toLocaleTimeString());
-            cloudHasUpdate = false; document.getElementById('cloud-update-dot').classList.add('hidden');
-            initDateFilters(); renderAssetSelects(); if(currentTab==='stats') updateStatsView(); if(currentTab==='assets') renderAssetsView(); updateSyncUI(true);
-            if(nL.length) { showToast(`✅ 已合併 ${nC.length} 筆雲端資料並上傳本地新資料`); executeDriveUpload(true); } else showToast(`✅ 從雲端同步合併 ${nC.length} 筆`);
-          } else { const now = new Date(); localStorage.setItem('last_sync_timestamp', now.getTime()); localStorage.setItem('last_sync_time', now.toLocaleTimeString()); updateSyncUI(true); showToast('資料已是最新狀態'); }
-        }
-      } catch(e) { console.error(e); }
+    // ==========================================
+    // 🚀 初始化執行
+    // ==========================================
+    window.onload = () => {
+      try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } categories.forEach(c => { if(!c.type) c.type = 'expense'; }); if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
+      try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } if(assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
+      try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } records.forEach(r => { if(!r.type) r.type = (r.cat === 'transfer') ? 'transfer' : 'expense'; if(!r.assetId && r.type !== 'transfer') r.assetId = assets[0].id; });
+
+      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+      window.renderAssetSelects(); window.setTxType('expense'); window.initDateFilters(true); window.initCanvasClickListener(); window.initSwipeGestures();
     };
-
-    window.executeDriveUpload = async (isAuto = true) => {
-      const t = localStorage.getItem('gdrive_token'); if(!t) { if(!isAuto) showToast('請先連線雲端'); return; }
-      if(!isAuto) showToast('⏳ 正在同步...');
-      const payload = { version: 2, records, categories, assets };
-      const body = JSON.stringify(payload), fid = localStorage.getItem('drive_file_id');
-      try {
-        let res;
-        if(fid) res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fid}?uploadType=media`, { method: 'PATCH', headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' }, body });
-        else { const fm = new FormData(); fm.append('metadata', new Blob([JSON.stringify({name: SYNC_FILE_NAME, mimeType: 'application/json'})], {type: 'application/json'})); fm.append('file', new Blob([body], {type: 'application/json'})); res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', headers: { 'Authorization': `Bearer ${t}` }, body: fm }); if(res.ok) localStorage.setItem('drive_file_id', (await res.json()).id); }
-        if(res.ok) { const now = new Date(); localStorage.setItem('last_sync_timestamp', now.getTime()); localStorage.setItem('last_sync_time', now.toLocaleTimeString()); updateSyncUI(true); if(!isAuto) showToast('✅ 雲端同步成功！'); } else if(res.status===401) { localStorage.removeItem('gdrive_token'); updateSyncUI(false); }
-      } catch(e) { if(!isAuto) showToast('❌ 網路錯誤'); }
-    };
-
-    window.exportData = () => { if(records.length===0 && assets.length===0) return showToast('無資料可匯出'); const a = document.createElement('a'); a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ version: 2, records, categories, assets })); a.download = `expense_backup_${new Date().toISOString().split('T')[0]}.json`; a.click(); showToast('✅ 備份下載成功'); };
-    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = imp; else { records = imp.records||[]; if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); initDateFilters(); renderAssetSelects(); showToast('✅ 還原成功'); executeDriveUpload(true); } catch(err){ showToast('❌ 格式錯誤'); } e.target.value = ''; }; r.readAsText(f); };
-    window.clearAllData = () => { if(confirm('警告：確定刪除所有資料？')) { records = []; assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; localStorage.removeItem('my_expenses'); localStorage.setItem('my_assets', JSON.stringify(assets)); initDateFilters(); renderAssetSelects(); showToast('已清空'); executeDriveUpload(true); } };
-
-    window.onload = init;
   </script>
-  <script src="https://accounts.google.com/gsi/client" async defer onload="initGoogleClient()"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="window.initGoogleClient()"></script>
 </body>
 </html>
