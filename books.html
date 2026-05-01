@@ -364,6 +364,14 @@
     let selectedCategoryId = null, currentTab = 'add', currentTxType = 'expense', currentStatsType = 'expense';
     let currentSearchQuery = '', currentCategoryFilter = null, pieChartSlices = [];
 
+    // 確保本地資料在 Firebase 初始化前就同步載入完成，避免資料被覆蓋清空
+    try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } 
+    categories.forEach(c => { if(!c.type) c.type = 'expense'; }); if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
+    try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } 
+    if(assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
+    try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } 
+    records.forEach(r => { if(!r.type) r.type = (r.cat === 'transfer') ? 'transfer' : 'expense'; if(!r.assetId && r.type !== 'transfer') r.assetId = assets[0].id; });
+
     // ==========================================
     // 🔒 認證與登入邏輯
     // ==========================================
@@ -414,7 +422,7 @@
         if(authScreen) {
             authScreen.style.display = 'flex'; void authScreen.offsetWidth; authScreen.classList.remove('opacity-0', 'pointer-events-none');
         }
-        records = []; document.getElementById('history-list').innerHTML = '';
+        // 修復：移除這裡的 records = []; 避免使用者首次登入時，本地資料被清空導致統計分析不見
         if (unsubscribeFirestore) unsubscribeFirestore(); 
         if (unsubscribeCatFirestore) unsubscribeCatFirestore();
         if (unsubscribeAssetFirestore) unsubscribeAssetFirestore();
@@ -597,7 +605,11 @@
       document.getElementById('stats-title-text').innerText = titleText;
       
       let chartRecords = filteredRecords.filter(r => r.type === currentStatsType), total = 0, totalsByCat = {};
-      chartRecords.forEach(r => { total += r.amount; totalsByCat[r.cat] = (totalsByCat[r.cat] || 0) + r.amount; });
+      chartRecords.forEach(r => { 
+        let cId = categories.find(c => c.id === r.cat) ? r.cat : (categories[0]?.id || 'unknown');
+        total += r.amount; 
+        totalsByCat[cId] = (totalsByCat[cId] || 0) + r.amount; 
+      });
       document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
       
       const canvas = document.getElementById('pieChart'), ctx = canvas.getContext('2d'), cx = canvas.width/2, cy = canvas.height/2, radius = Math.min(cx, cy);
@@ -607,13 +619,12 @@
         document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
       } else {
         let startAngle = -0.5 * Math.PI, breakdownArr = [];
-        categories.forEach(cat => {
-          if(totalsByCat[cat.id]) {
-             const amount = totalsByCat[cat.id], sliceAngle = (amount / total) * 2 * Math.PI, endAngle = startAngle + sliceAngle;
-             ctx.fillStyle = cat.color; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
-             pieChartSlices.push({ id: cat.id, startAngle, endAngle }); startAngle = endAngle;
-             breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1) });
-          }
+        Object.keys(totalsByCat).forEach(catId => {
+          const cat = categories.find(c => c.id === catId) || { id: 'unknown', name: '未知分類', color: '#9CA3AF', icon: 'fas fa-question', type: currentStatsType };
+          const amount = totalsByCat[catId], sliceAngle = (amount / total) * 2 * Math.PI, endAngle = startAngle + sliceAngle;
+          ctx.fillStyle = cat.color; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
+          pieChartSlices.push({ id: catId, startAngle, endAngle }); startAngle = endAngle;
+          breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1) });
         });
         ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
         breakdownArr.sort((a,b) => b.amount - a.amount);
@@ -641,7 +652,7 @@
               catIconHtml = `<div class="p-3 rounded-full flex items-center justify-center bg-gray-100 text-gray-500"><i class="fas fa-exchange-alt text-sm"></i></div>`;
               catSelectHtml = `<span class="font-bold text-gray-800">資金移轉</span>`;
            } else {
-              const cat = categories.find(c => c.id === r.cat) || categories[0];
+              const cat = categories.find(c => c.id === r.cat) || { id: 'unknown', name: '未知', color: '#9CA3AF', icon: 'fas fa-question', type: currentStatsType };
               const aName = assets.find(x => x.id === r.assetId)?.name || '?';
               accountBadge = `<span class="bg-gray-200 px-1 rounded text-[8px] mr-1">${aName}</span>`;
               const currentCatOptions = catOptionsTemplate.replace(`value="${cat.id}"`, `value="${cat.id}" selected`);
@@ -786,10 +797,6 @@
     // 🚀 初始化執行
     // ==========================================
     window.onload = () => {
-      try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } categories.forEach(c => { if(!c.type) c.type = 'expense'; }); if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
-      try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } if(assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
-      try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } records.forEach(r => { if(!r.type) r.type = (r.cat === 'transfer') ? 'transfer' : 'expense'; if(!r.assetId && r.type !== 'transfer') r.assetId = assets[0].id; });
-
       document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
       window.renderAssetSelects(); window.setTxType('expense'); window.initDateFilters(true); window.initCanvasClickListener(); window.initSwipeGestures();
     };
