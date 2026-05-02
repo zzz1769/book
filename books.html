@@ -193,8 +193,8 @@
       <!-- ================= [頁面二] 統計 (Stats) ================= -->
       <div id="view-stats" class="p-3 space-y-3 hidden" style="touch-action: pan-y;">
         <div class="flex space-x-2">
-          <select id="filter-year" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center"></select>
-          <select id="filter-month" onchange="updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center">
+          <select id="filter-year" onchange="window.updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center"></select>
+          <select id="filter-month" onchange="window.updateStatsView()" class="flex-1 p-2.5 text-sm font-bold bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 text-gray-700 shadow-sm transition-colors appearance-none text-center">
             <option value="all">全年</option>
             <option value="01">1月</option><option value="02">2月</option><option value="03">3月</option>
             <option value="04">4月</option><option value="05">5月</option><option value="06">6月</option>
@@ -364,13 +364,31 @@
     let selectedCategoryId = null, currentTab = 'add', currentTxType = 'expense', currentStatsType = 'expense';
     let currentSearchQuery = '', currentCategoryFilter = null, pieChartSlices = [];
 
+    // ==========================================
+    // 🛠️ 資料強固與清洗機制 (防止舊資料當機)
+    // ==========================================
+    function sanitizeRecords(arr) {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(r => ({
+            ...r,
+            id: String(r.id || Date.now()), // 確保 ID 永遠是字串，防止 .startsWith 報錯
+            date: String(r.date || new Date().toISOString().split('T')[0]), // 確保有日期字串
+            amount: Number(r.amount) || 0, // 確保金額是數字
+            note: String(r.note || ''),
+            type: r.type || (r.cat === 'transfer' ? 'transfer' : 'expense'),
+            assetId: r.assetId || (r.type !== 'transfer' ? (assets[0]?.id || 'asset_cash') : undefined)
+        })).sort((a, b) => new Date(b.date) - new Date(a.date));
+    }
+
     // 確保本地資料在 Firebase 初始化前就同步載入完成，避免資料被覆蓋清空
     try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } 
     categories.forEach(c => { if(!c.type) c.type = 'expense'; }); if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
+    
     try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } 
-    if(assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
+    if(!Array.isArray(assets) || assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
+    
     try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } 
-    records.forEach(r => { if(!r.type) r.type = (r.cat === 'transfer') ? 'transfer' : 'expense'; if(!r.assetId && r.type !== 'transfer') r.assetId = assets[0].id; });
+    records = sanitizeRecords(records); // 載入後立即進行安全清洗
 
     // ==========================================
     // 🔒 認證與登入邏輯
@@ -422,7 +440,6 @@
         if(authScreen) {
             authScreen.style.display = 'flex'; void authScreen.offsetWidth; authScreen.classList.remove('opacity-0', 'pointer-events-none');
         }
-        // 修復：移除這裡的 records = []; 避免使用者首次登入時，本地資料被清空導致統計分析不見
         if (unsubscribeFirestore) unsubscribeFirestore(); 
         if (unsubscribeCatFirestore) unsubscribeCatFirestore();
         if (unsubscribeAssetFirestore) unsubscribeAssetFirestore();
@@ -433,7 +450,7 @@
       if (!currentUser) return;
       unsubscribeFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), (docSnap) => {
         if (docSnap.exists() && docSnap.data().list) {
-            records = docSnap.data().list.map(r => { r.date = r.date || new Date().toISOString().split('T')[0]; return r; }).sort((a, b) => new Date(b.date) - new Date(a.date));
+            records = sanitizeRecords(docSnap.data().list); // 取得雲端資料也需清洗
             localStorage.setItem('my_expenses', JSON.stringify(records));
             window.initDateFilters(); if (currentTab === 'stats') window.updateStatsView();
         } else { window.syncExpensesToCloud(); }
@@ -523,7 +540,7 @@
     window.addRecord = () => {
       const amount = Number(document.getElementById('input-amount').value);
       if(!amount || amount <= 0) return window.showToast('請輸入有效的金額！');
-      const record = { id: Date.now().toString(), type: currentTxType, amount, date: document.getElementById('input-date').value, note: document.getElementById('input-note').value.trim() };
+      const record = { id: String(Date.now()), type: currentTxType, amount, date: document.getElementById('input-date').value, note: document.getElementById('input-note').value.trim() };
       if (currentTxType === 'expense' || currentTxType === 'income') {
          record.cat = selectedCategoryId; record.assetId = document.getElementById('input-asset').value;
          const a = assets.find(x => x.id === record.assetId); if(a) a.balance += (currentTxType === 'income' ? amount : -amount);
@@ -541,7 +558,7 @@
     };
 
     window.updateRecordField = (id, field, value) => {
-      const index = records.findIndex(r => r.id === id); if (index === -1) return;
+      const index = records.findIndex(r => r.id === String(id)); if (index === -1) return;
       const r = records[index];
       if (field === 'amount') {
           value = Number(value); if (!value || value <= 0) { window.showToast('無效金額'); window.updateStatsView(); return; }
@@ -550,7 +567,7 @@
           else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a) a.balance += diff; } 
           else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF) aF.balance -= diff; if (aT) aT.balance += diff; }
           localStorage.setItem('my_assets', JSON.stringify(assets)); window.syncAssetsToCloud();
-      } else if (field === 'note') value = value.trim();
+      } else if (field === 'note') value = String(value).trim();
       r[field] = value; if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
       localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud();
       window.updateStatsView(); window.renderAssetSelects(); window.showToast('✅ 紀錄已自動儲存');
@@ -558,26 +575,28 @@
 
     window.deleteRecord = (id) => {
       if(!confirm('確定要刪除這筆紀錄嗎？')) return;
-      const r = records.find(x => x.id === id);
+      const r = records.find(x => x.id === String(id));
       if(r) {
          if (r.type === 'expense') { const a = assets.find(x => x.id === r.assetId); if (a) a.balance += r.amount; } 
          else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a) a.balance -= r.amount; } 
          else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF) aF.balance += r.amount; if (aT) aT.balance -= r.amount; }
          localStorage.setItem('my_assets', JSON.stringify(assets)); window.syncAssetsToCloud();
       }
-      records = records.filter(x => x.id !== id); localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud();
+      records = records.filter(x => x.id !== String(id)); localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud();
       window.initDateFilters(); window.updateStatsView(); window.renderAssetSelects(); window.showToast('已刪除紀錄');
     };
 
     // ==========================================
     // 📊 統計視圖邏輯
     // ==========================================
-    window.setStatsType = (type) => { currentStatsType = type; document.getElementById('stats-type-expense').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'expense' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; document.getElementById('stats-type-income').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'income' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; window.updateStatsView(); };
+    window.setStatsType = (type) => { window.currentStatsType = type; currentStatsType = type; document.getElementById('stats-type-expense').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'expense' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; document.getElementById('stats-type-income').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'income' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; window.updateStatsView(); };
 
     window.initDateFilters = (isFirstLoad = false) => {
       const yearSelect = document.getElementById('filter-year'), monthSelect = document.getElementById('filter-month');
+      if (!yearSelect || !monthSelect) return;
       const currentSelectedYear = yearSelect.value, currentYear = new Date().getFullYear().toString();
-      const years = new Set(records.map(r => r.date.split('-')[0])); years.add(currentYear);
+      const years = new Set(records.map(r => r.date ? r.date.split('-')[0] : currentYear)); 
+      years.add(currentYear);
       const sortedYears = Array.from(years).sort((a, b) => b - a);
       yearSelect.innerHTML = '<option value="all">全部年份</option>' + sortedYears.map(y => `<option value="${y}">${y}年</option>`).join('');
       if (!isFirstLoad && currentSelectedYear && sortedYears.includes(currentSelectedYear)) yearSelect.value = currentSelectedYear;
@@ -659,7 +678,9 @@
               catIconHtml = `<select onchange="window.updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><div class="p-3 rounded-full flex items-center justify-center transition-transform group-hover:scale-105" style="background-color: ${cat.color}20; color: ${cat.color}"><i class="${cat.icon} text-sm"></i></div>`;
               catSelectHtml = `<div class="relative cursor-pointer"><select onchange="window.updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>`;
            }
-           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative"><div class="flex items-center space-x-3 w-[65%]"><div class="relative shrink-0" title="更換分類">${catIconHtml}</div><div class="overflow-hidden flex-1"><div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${r.id.startsWith('INV') ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div><div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">${accountBadge}<input type="date" value="${r.date}" onchange="window.updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10" title="修改日期"><span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="window.updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註"></div></div></div><div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span><input type="number" value="${r.amount}" onchange="window.updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10" title="修改金額" inputmode="numeric"><button onclick="window.deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button></div></div>`;
+           // 針對 ID 確保強制為字串，防止 .startsWith 報錯
+           const isInvoice = String(r.id).startsWith('INV');
+           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative"><div class="flex items-center space-x-3 w-[65%]"><div class="relative shrink-0" title="更換分類">${catIconHtml}</div><div class="overflow-hidden flex-1"><div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${isInvoice ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div><div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">${accountBadge}<input type="date" value="${r.date}" onchange="window.updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10" title="修改日期"><span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="window.updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註"></div></div></div><div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span><input type="number" value="${r.amount}" onchange="window.updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10" title="修改金額" inputmode="numeric"><button onclick="window.deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button></div></div>`;
          }).join('');
       }
     };
@@ -774,7 +795,7 @@
           }
           invoiceMap.forEach((d, invNum) => {
               const formattedDate = d.dateRaw.includes('/') ? d.dateRaw.replace(/\//g, '-') : (d.dateRaw.length===8 ? `${d.dateRaw.substring(0,4)}-${d.dateRaw.substring(4,6)}-${d.dateRaw.substring(6,8)}` : new Date().toISOString().split('T')[0]);
-              if(!records.some(r => r.id === `INV_${invNum}`)) { 
+              if(!records.some(r => String(r.id) === `INV_${invNum}`)) { 
                   const rec = { id: `INV_${invNum}`, type: 'expense', amount: d.amount, cat: window.autoCategorize(d.shopName), assetId: assets[0]?.id || 'asset_cash', date: formattedDate, note: `${d.shopName}${d.items.length ? ` (${d.items.slice(0,2).join('、')}${d.items.length>2?'...':''})` : ''}` };
                   records.push(rec); newC++; if(assets[0]) assets[0].balance -= d.amount;
               } else skipC++;
@@ -785,7 +806,7 @@
     };
 
     window.exportData = () => { if(records.length===0 && assets.length===0) return window.showToast('無資料可匯出'); const a = document.createElement('a'); a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ version: 2, records, categories, assets })); a.download = `expense_backup_${new Date().toISOString().split('T')[0]}.json`; a.click(); window.showToast('✅ 備份下載成功'); };
-    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = imp; else { records = imp.records||[]; if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('✅ 還原成功'); window.syncExpensesToCloud(); window.syncCategoriesToCloud(); window.syncAssetsToCloud(); } catch(err){ window.showToast('❌ 格式錯誤'); } e.target.value = ''; }; r.readAsText(f); };
+    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = window.sanitizeRecords(imp); else { records = window.sanitizeRecords(imp.records||[]); if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('✅ 還原成功'); window.syncExpensesToCloud(); window.syncCategoriesToCloud(); window.syncAssetsToCloud(); } catch(err){ window.showToast('❌ 格式錯誤'); } e.target.value = ''; }; r.readAsText(f); };
     window.clearAllData = () => { if(confirm('警告：確定刪除所有資料？')) { records = []; assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; localStorage.removeItem('my_expenses'); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('已清空'); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } };
 
     // Google Drive 備份支援(作為輔助)
@@ -794,12 +815,15 @@
     window.executeDriveUpload = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
 
     // ==========================================
-    // 🚀 初始化執行
+    // 🚀 初始化執行 (移除 window.onload 避免漏抓)
     // ==========================================
-    window.onload = () => {
-      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
-      window.renderAssetSelects(); window.setTxType('expense'); window.initDateFilters(true); window.initCanvasClickListener(); window.initSwipeGestures();
-    };
+    document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+    window.renderAssetSelects();
+    window.setTxType('expense');
+    window.initDateFilters(true);
+    window.initCanvasClickListener();
+    window.initSwipeGestures();
+    
   </script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="window.initGoogleClient()"></script>
 </body>
