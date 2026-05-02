@@ -369,15 +369,28 @@
     // ==========================================
     function sanitizeRecords(arr) {
         if (!Array.isArray(arr)) return [];
-        return arr.map(r => ({
-            ...r,
-            id: String(r.id || Date.now()), // 確保 ID 永遠是字串，防止 .startsWith 報錯
-            date: String(r.date || new Date().toISOString().split('T')[0]), // 確保有日期字串
-            amount: Number(r.amount) || 0, // 確保金額是數字
-            note: String(r.note || ''),
-            type: r.type || (r.cat === 'transfer' ? 'transfer' : 'expense'),
-            assetId: r.assetId || (r.type !== 'transfer' ? (assets[0]?.id || 'asset_cash') : undefined)
-        })).sort((a, b) => new Date(b.date) - new Date(a.date));
+        return arr.map(r => {
+            // 自動修復：反查分類清單，確保舊版紀錄的 type (收入/支出) 正確，避免舊的收入紀錄變成支出
+            let derivedType = r.type;
+            if (r.cat && r.cat !== 'transfer') {
+                const catObj = categories.find(c => c.id === r.cat);
+                if (catObj && catObj.type) {
+                    derivedType = catObj.type;
+                }
+            } else if (r.cat === 'transfer') {
+                derivedType = 'transfer';
+            }
+
+            return {
+                ...r,
+                id: String(r.id || Date.now()), // 確保 ID 永遠是字串，防止 .startsWith 報錯
+                date: String(r.date || new Date().toISOString().split('T')[0]), // 確保有日期字串
+                amount: Number(r.amount) || 0, // 確保金額是數字
+                note: String(r.note || ''),
+                type: derivedType || (r.cat === 'transfer' ? 'transfer' : 'expense'),
+                assetId: r.assetId || (r.type !== 'transfer' ? (assets[0]?.id || 'asset_cash') : undefined)
+            };
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
     }
 
     // 確保本地資料在 Firebase 初始化前就同步載入完成，避免資料被覆蓋清空
@@ -625,7 +638,8 @@
       
       let chartRecords = filteredRecords.filter(r => r.type === currentStatsType), total = 0, totalsByCat = {};
       chartRecords.forEach(r => { 
-        let cId = categories.find(c => c.id === r.cat) ? r.cat : (categories[0]?.id || 'unknown');
+        // 修正：未知的分類統一歸入 unknown，防止預設掉進第一項(餐飲)
+        let cId = categories.find(c => c.id === r.cat) ? r.cat : 'unknown';
         total += r.amount; 
         totalsByCat[cId] = (totalsByCat[cId] || 0) + r.amount; 
       });
@@ -811,6 +825,10 @@
 
     // Google Drive 備份支援(作為輔助)
     window.initGoogleClient = () => { if(typeof google!=='undefined'&&google.accounts) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file', callback: async (t) => { if(t?.access_token) { localStorage.setItem('gdrive_token', t.access_token); window.showToast('✅ Drive 連線成功！'); } } }); };
+    
+    // 自動偵測 Google API 載入狀態，避免 onload 時間差導致的報錯
+    const checkGoogleClient = setInterval(() => { if (typeof google !== 'undefined' && google.accounts) { clearInterval(checkGoogleClient); window.initGoogleClient(); } }, 200);
+    
     window.syncFromDriveManual = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
     window.executeDriveUpload = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
 
@@ -825,6 +843,6 @@
     window.initSwipeGestures();
     
   </script>
-  <script src="https://accounts.google.com/gsi/client" async defer onload="window.initGoogleClient()"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
 </html>
