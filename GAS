@@ -1,0 +1,22 @@
+function doGet(e) {
+  // 動態取得前端傳遞過來的 url 參數
+  var targetUrl = e.parameter.url;
+  
+  if (!targetUrl) {
+    return ContentService.createTextOutput(JSON.stringify({ error: "Missing url parameter" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  try {
+    // 透過 Google 伺服器發送請求
+    var response = UrlFetchApp.fetch(targetUrl);
+    var content = response.getContentText();
+    
+    // 回傳 JSON 給前端，並設定正確的 MimeType
+    return ContentService.createTextOutput(content)
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
