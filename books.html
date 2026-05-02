@@ -403,8 +403,8 @@
         try {
             if(!twseData) twseData = {};
             
-            // 使用您最新發布的 Google Apps Script Proxy
-            const gasProxyUrl = 'https://script.google.com/macros/s/AKfycbzrezSFpSGFv7utRHHFEgmLeDXjNfzoiUR0dbl3ykkbNZv-YlKUBKF9z6mwFO9Xw8zN/exec?url=';
+            // 使用大家都可以用的公開 Google Apps Script Proxy
+            const gasProxyUrl = 'https://script.google.com/macros/s/AKfycbxwjlQvtfnoYHNKrePcSEV-gVGnjXkXXMSyDfGDSoYgx-5hZbJD1CIvLcdZyRmaBmfg/exec?url=';
 
             const fetchWithGAS = async (targetUrl) => {
                 const res = await fetch(gasProxyUrl + encodeURIComponent(targetUrl));
