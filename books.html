@@ -16,7 +16,7 @@
     }
   </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
+<body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] w-full max-w-[100vw] overflow-hidden relative">
 
   <!-- ================= 認證登入畫面 (Google Firebase Auth) ================= -->
   <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
@@ -175,21 +175,25 @@
             <button id="btn-type-transfer" onclick="window.setTxType('transfer')" class="flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors">移轉</button>
           </div>
 
-          <div id="category-section" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-3 shrink-0">
+          <div id="category-section" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-3 shrink-0 w-full overflow-hidden">
             <label class="block text-xs font-medium text-gray-700 mb-2">選擇分類</label>
-            <!-- 限制分類區塊的最大高度，項目過多時會自動內部滾動 -->
-            <div id="category-container" class="grid grid-cols-4 gap-2 max-h-[25vh] overflow-y-auto no-scrollbar p-1 -m-1"></div>
+            <!-- 限制高度為一行(76px)，改回網格排列並支援上下滑動 -->
+            <div id="category-container" class="grid grid-cols-4 gap-2 overflow-y-auto no-scrollbar w-full max-h-[76px] content-start"></div>
           </div>
           
-          <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-4 shrink-0">
-            <div class="w-full">
-              <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
-              <input type="date" id="input-date" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block relative z-10">
+          <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-4 shrink-0 w-full">
+            <!-- 調整：日期與帳戶並排，解決日期太寬的問題 -->
+            <div class="flex space-x-3 w-full">
+              <div id="date-section" class="w-1/2">
+                <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
+                <input type="date" id="input-date" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block relative z-10">
+              </div>
+              <div id="asset-single-section" class="w-1/2">
+                <label class="block text-xs font-medium text-gray-700 mb-1">資產帳戶</label>
+                <select id="input-asset" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block"></select>
+              </div>
             </div>
-            <div id="asset-single-section" class="w-full">
-              <label class="block text-xs font-medium text-gray-700 mb-1">資產帳戶</label>
-              <select id="input-asset" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block"></select>
-            </div>
+            
             <div id="asset-transfer-section" class="w-full hidden space-y-3">
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1">移出資產 (扣除)</label>
@@ -832,7 +836,8 @@
     window.renderCategories = () => {
         const container = document.getElementById('category-container'); if(!container) return;
         const filteredCats = categories.filter(c => c.type === currentTxType);
-        container.innerHTML = filteredCats.map(cat => `<button onclick="window.selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}"><div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280"><i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">${cat.name}</span></button>`).join('');
+        // 恢復原本的網格佈局，移除強制固定寬度，讓它在網格中自動適應
+        container.innerHTML = filteredCats.map(cat => `<button onclick="window.selectCategory('${cat.id}')" class="cat-btn flex flex-col items-center justify-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent" data-id="${cat.id}"><div class="icon-wrap w-8 h-8 flex items-center justify-center rounded-full mb-1 transition-colors" style="background-color: #E5E7EB; color: #6B7280"><i class="${cat.icon} text-sm"></i></div><span class="text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">${cat.name}</span></button>`).join('');
         if(!filteredCats.find(c => c.id === selectedCategoryId)) selectedCategoryId = filteredCats[0]?.id;
         if(selectedCategoryId) window.selectCategory(selectedCategoryId);
     };
@@ -842,8 +847,8 @@
       document.querySelectorAll('.cat-btn').forEach(btn => {
         const cat = categories.find(c => c.id === btn.dataset.id); if(!cat) return;
         const iw = btn.querySelector('.icon-wrap'), ts = btn.querySelector('span');
-        if(cat.id === id) { btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-blue-50 border-blue-500`; iw.style.cssText = `background-color: ${cat.color}; color: white`; ts.className = `text-[10px] transition-colors font-bold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`; } 
-        else { btn.className = `cat-btn flex flex-col items-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent hover:bg-gray-100`; iw.style.cssText = `background-color: #E5E7EB; color: #6B7280`; ts.className = `text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`; }
+        if(cat.id === id) { btn.className = `cat-btn flex flex-col items-center justify-center p-2 rounded-xl transition-all border-2 bg-blue-50 border-blue-500`; iw.style.cssText = `background-color: ${cat.color}; color: white`; ts.className = `text-[10px] transition-colors font-bold text-blue-700 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`; } 
+        else { btn.className = `cat-btn flex flex-col items-center justify-center p-2 rounded-xl transition-all border-2 bg-gray-50 border-transparent hover:bg-gray-100`; iw.style.cssText = `background-color: #E5E7EB; color: #6B7280`; ts.className = `text-[10px] transition-colors text-gray-600 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center`; }
       });
     };
 
