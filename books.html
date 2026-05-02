@@ -6,6 +6,7 @@
   <title>極簡記帳</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <style>
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -99,6 +100,7 @@
             <option value="deposit">存款</option>
             <option value="investment">投資 (基金/虛擬幣等)</option>
             <option value="stock">股票庫存 (證券戶)</option>
+            <option value="creditcard">信用卡</option>
             <option value="credit">信用貸款</option>
             <option value="mortgage">房屋貸款</option>
           </select>
@@ -111,7 +113,7 @@
             <input type="text" id="asset-name-input" placeholder="例如：台新銀行、元大證券..." class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500">
           </div>
           <div id="asset-balance-wrapper">
-            <label class="block text-xs font-medium text-gray-700 mb-1">當前金額</label>
+            <label id="asset-balance-label" class="block text-xs font-medium text-gray-700 mb-1">當前金額</label>
             <input type="number" id="asset-balance-input" inputmode="numeric" class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500" placeholder="0">
           </div>
         </div>
@@ -175,7 +177,7 @@
         <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-4 flex-1 overflow-y-auto no-scrollbar">
           <div class="w-full">
             <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
-            <input type="date" id="input-date" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block">
+            <input type="date" id="input-date" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block relative z-10">
           </div>
           <div id="asset-single-section" class="w-full">
             <label class="block text-xs font-medium text-gray-700 mb-1">資產帳戶</label>
@@ -267,7 +269,7 @@
             </div>
             <div id="total-net-worth" class="text-4xl font-bold tracking-tight">$0</div>
          </div>
-         <div id="assets-list" class="space-y-3 pb-6"></div>
+         <div id="assets-list" class="pb-6"></div>
       </div>
 
       <!-- ================= [頁面四] 設定 (Settings) ================= -->
@@ -364,12 +366,14 @@
     const GOOGLE_CLIENT_ID = '939340478771-4bupp9mrpr55j1j4domrb4g6pehm86j5.apps.googleusercontent.com'; 
     let tokenClient;
 
+    // 定義資產屬性，sign = 1 代表正資產，-1 代表負債
     const ASSET_TYPES = {
       cash: { name: '現金', icon: 'fas fa-wallet', color: '#10B981', sign: 1 },
       deposit: { name: '存款', icon: 'fas fa-piggy-bank', color: '#3B82F6', sign: 1 },
       investment: { name: '投資', icon: 'fas fa-chart-line', color: '#8B5CF6', sign: 1 },
       stock: { name: '股票庫存', icon: 'fas fa-chart-bar', color: '#F59E0B', sign: 1 },
-      credit: { name: '信用貸款', icon: 'fas fa-credit-card', color: '#EF4444', sign: -1 },
+      creditcard: { name: '信用卡', icon: 'fas fa-credit-card', color: '#EF4444', sign: -1 },
+      credit: { name: '信用貸款', icon: 'fas fa-hand-holding-usd', color: '#EF4444', sign: -1 },
       mortgage: { name: '房屋貸款', icon: 'fas fa-house-damage', color: '#EC4899', sign: -1 }
     };
 
@@ -597,21 +601,17 @@
     };
 
     window.renderAssetSelects = () => {
-        const options = assets.map(a => {
+        // 過濾掉股票庫存類別的資產，不在記帳選單中顯示
+        const validAssets = assets.filter(a => a.type !== 'stock');
+        
+        const options = validAssets.map(a => {
             let displayBalance = a.balance;
             let displayName = a.name;
-            if (a.type === 'stock') {
-                if (twseData) {
-                    let totalMv = 0;
-                    (a.lots || []).forEach(l => {
-                        const price = twseData[l.stockId] ? twseData[l.stockId].price : 0;
-                        totalMv += price > 0 ? price * l.shares : l.cost;
-                    });
-                    if (a.lots && a.lots.length > 0) displayBalance = totalMv;
-                }
-            }
-            return `<option value="${a.id}">${displayName} ($${Math.round(displayBalance).toLocaleString()})</option>`;
+            const isDebt = ASSET_TYPES[a.type]?.sign === -1;
+            const displayPrefix = isDebt && displayBalance > 0 ? '-' : '';
+            return `<option value="${a.id}">${displayName} (${displayPrefix}$${Math.round(displayBalance).toLocaleString()})</option>`;
         }).join('');
+        
         const inA = document.getElementById('input-asset'); if(inA) inA.innerHTML = options;
         const inF = document.getElementById('input-asset-from'); if(inF) inF.innerHTML = options;
         const inT = document.getElementById('input-asset-to'); if(inT) inT.innerHTML = options;
@@ -636,7 +636,7 @@
            return; 
        }
        
-       list.innerHTML = assets.map(a => {
+       list.innerHTML = assets.map((a, index) => {
            const typeInfo = ASSET_TYPES[a.type] || ASSET_TYPES['cash'];
            let balanceToUse = a.balance;
            let extraInfoHtml = '';
@@ -646,13 +646,11 @@
                let totalCost = 0;
                let groups = {};
 
-               // 相容舊資料邏輯
                const lots = a.lots || [];
                if (lots.length === 0 && a.stockId) {
                    lots.push({ stockId: a.stockId, shares: a.shares || 0, cost: a.cost || 0 });
                }
 
-               // 將相同代號的股票彙整 (總股數與總成本)
                lots.forEach(l => {
                    if (!l.stockId) return;
                    if (!groups[l.stockId]) groups[l.stockId] = { shares: 0, cost: 0 };
@@ -695,7 +693,6 @@
                    `;
                }).join('');
 
-               // 如果這個證券戶完全沒有任何庫存
                if (Object.keys(groups).length === 0) {
                    stocksHtml = `<div class="text-center text-gray-400 text-xs py-2">目前尚無庫存股票</div>`;
                }
@@ -705,9 +702,8 @@
                const totalPlColor = totalPl > 0 ? 'text-red-500' : (totalPl < 0 ? 'text-green-500' : 'text-gray-500');
                const totalPlSign = totalPl > 0 ? '+' : '';
 
-               // 加上收合與展開的功能
                extraInfoHtml = `
-                 <div class="mt-3 pt-3 border-t border-gray-100 flex flex-col w-full" onclick="event.stopPropagation();">
+                 <div class="mt-3 pt-3 border-t border-gray-100 flex flex-col w-full cursor-default" onclick="event.stopPropagation();">
                     <div class="flex justify-between items-center text-xs font-bold text-gray-500 cursor-pointer py-1 hover:text-gray-700" onclick="const detail = this.nextElementSibling; detail.classList.toggle('hidden'); const icon = this.querySelector('.toggle-icon'); icon.classList.toggle('rotate-180');">
                         <span>庫存明細 (${Object.keys(groups).length} 檔)</span>
                         <div class="flex items-center space-x-2">
@@ -726,26 +722,65 @@
                `;
            }
 
+           // 將資產或負債加入總淨資產計算 (若是負債，sign 會是 -1)
            netWorth += balanceToUse * typeInfo.sign;
 
+           const isDebt = typeInfo.sign === -1;
+           const displayPrefix = isDebt && balanceToUse > 0 ? '-' : '';
+           const textColor = isDebt ? 'text-red-500' : 'text-gray-800';
+
            return `
-             <div onclick="window.openAssetModal('${a.id}')" class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col cursor-pointer hover:border-blue-200 transition-colors">
-                <div class="flex items-center justify-between w-full">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-white" style="background-color: ${typeInfo.color}"><i class="${typeInfo.icon} text-lg"></i></div>
-                        <div>
-                            <div class="font-bold text-gray-800 text-sm">${a.name}</div>
-                            <div class="text-[10px] text-gray-400">${typeInfo.name}</div>
-                        </div>
+             <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col mb-3 hover:border-blue-200 transition-colors relative" data-id="${a.id}">
+                <div class="flex items-center w-full">
+                    <!-- 拖曳手把 -->
+                    <div class="drag-handle pl-1 pr-3 py-2 -ml-2 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none flex items-center justify-center shrink-0">
+                        <i class="fas fa-grip-vertical text-lg"></i>
                     </div>
-                    <div class="text-right font-bold text-lg text-gray-800">$${Math.round(balanceToUse).toLocaleString()}</div>
+                    
+                    <!-- 內容區塊 -->
+                    <div class="flex-1 flex items-center justify-between cursor-pointer overflow-hidden" onclick="window.openAssetModal('${a.id}')">
+                        <div class="flex items-center space-x-3 overflow-hidden">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0" style="background-color: ${typeInfo.color}"><i class="${typeInfo.icon} text-lg"></i></div>
+                            <div class="overflow-hidden">
+                                <div class="font-bold text-gray-800 text-sm truncate">${a.name}</div>
+                                <div class="text-[10px] text-gray-400">${typeInfo.name}</div>
+                            </div>
+                        </div>
+                        <div class="text-right font-bold text-lg ${textColor} shrink-0 ml-2">${displayPrefix}$${Math.round(balanceToUse).toLocaleString()}</div>
+                    </div>
                 </div>
                 ${extraInfoHtml}
              </div>
            `;
        }).join('');
        
-       document.getElementById('total-net-worth').innerText = `$${Math.round(netWorth).toLocaleString()}`;
+       // 總淨資產若小於零，顯示負號
+       document.getElementById('total-net-worth').innerText = netWorth < 0 ? `-$${Math.abs(Math.round(netWorth)).toLocaleString()}` : `$${Math.round(netWorth).toLocaleString()}`;
+
+       // 初始化 SortableJS 拖曳排序功能
+       const el = document.getElementById('assets-list');
+       if (window.assetSortable) {
+           window.assetSortable.destroy(); 
+       }
+       if (assets.length > 1 && typeof Sortable !== 'undefined') {
+           window.assetSortable = Sortable.create(el, {
+               handle: '.drag-handle', 
+               animation: 150,
+               ghostClass: 'opacity-40', 
+               onEnd: function (evt) {
+                   const oldIndex = evt.oldIndex;
+                   const newIndex = evt.newIndex;
+                   if (oldIndex === newIndex) return; 
+
+                   const movedItem = assets.splice(oldIndex, 1)[0];
+                   assets.splice(newIndex, 0, movedItem);
+
+                   localStorage.setItem('my_assets', JSON.stringify(assets));
+                   window.syncAssetsToCloud();
+                   window.renderAssetSelects(); 
+               }
+           });
+       }
     };
 
     window.renderCategories = () => {
@@ -775,14 +810,18 @@
          record.cat = selectedCategoryId; record.assetId = document.getElementById('input-asset').value;
          const a = assets.find(x => x.id === record.assetId); 
          if(a && a.type !== 'stock') {
-             a.balance += (currentTxType === 'income' ? amount : -amount);
+             // 智慧轉換：如果選擇的是負債帳戶，支出會增加負債，收入會減少負債
+             const sign = ASSET_TYPES[a.type]?.sign || 1;
+             a.balance += (currentTxType === 'income' ? amount * sign : -amount * sign);
          }
       } else if (currentTxType === 'transfer') {
          record.assetFrom = document.getElementById('input-asset-from').value; record.assetTo = document.getElementById('input-asset-to').value;
          if (record.assetFrom === record.assetTo) return window.showToast('轉出與轉入資產不可相同');
          const aF = assets.find(x => x.id === record.assetFrom), aT = assets.find(x => x.id === record.assetTo);
-         if(aF && aF.type !== 'stock') aF.balance -= amount; 
-         if(aT && aT.type !== 'stock') aT.balance += amount;
+         
+         // 智慧轉換：移轉時若為負債帳戶（例如用現金還卡費，卡費欠款會減少）
+         if(aF && aF.type !== 'stock') aF.balance -= amount * (ASSET_TYPES[aF.type]?.sign || 1); 
+         if(aT && aT.type !== 'stock') aT.balance += amount * (ASSET_TYPES[aT.type]?.sign || 1);
       }
       
       records.push(record); records.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -799,9 +838,17 @@
       if (field === 'amount') {
           value = Number(value); if (!value || value <= 0) { window.showToast('無效金額'); window.updateStatsView(); return; }
           const diff = value - r.amount;
-          if (r.type === 'expense') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance -= diff; } 
-          else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance += diff; } 
-          else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF && aF.type !== 'stock') aF.balance -= diff; if (aT && aT.type !== 'stock') aT.balance += diff; }
+          if (r.type === 'expense') { 
+              const a = assets.find(x => x.id === r.assetId); 
+              if (a && a.type !== 'stock') a.balance -= diff * (ASSET_TYPES[a.type]?.sign || 1); 
+          } else if (r.type === 'income') { 
+              const a = assets.find(x => x.id === r.assetId); 
+              if (a && a.type !== 'stock') a.balance += diff * (ASSET_TYPES[a.type]?.sign || 1); 
+          } else if (r.type === 'transfer') { 
+              const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); 
+              if (aF && aF.type !== 'stock') aF.balance -= diff * (ASSET_TYPES[aF.type]?.sign || 1); 
+              if (aT && aT.type !== 'stock') aT.balance += diff * (ASSET_TYPES[aT.type]?.sign || 1); 
+          }
           localStorage.setItem('my_assets', JSON.stringify(assets));
           window.syncAssetsToCloud();
       } else if (field === 'note') value = String(value).trim();
@@ -818,9 +865,17 @@
       if(!confirm('確定要刪除這筆紀錄嗎？')) return;
       const r = records.find(x => x.id === String(id));
       if(r) {
-         if (r.type === 'expense') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance += r.amount; } 
-         else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance -= r.amount; } 
-         else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF && aF.type !== 'stock') aF.balance += r.amount; if (aT && aT.type !== 'stock') aT.balance -= r.amount; }
+         if (r.type === 'expense') { 
+             const a = assets.find(x => x.id === r.assetId); 
+             if (a && a.type !== 'stock') a.balance += r.amount * (ASSET_TYPES[a.type]?.sign || 1); 
+         } else if (r.type === 'income') { 
+             const a = assets.find(x => x.id === r.assetId); 
+             if (a && a.type !== 'stock') a.balance -= r.amount * (ASSET_TYPES[a.type]?.sign || 1); 
+         } else if (r.type === 'transfer') { 
+             const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); 
+             if (aF && aF.type !== 'stock') aF.balance += r.amount * (ASSET_TYPES[aF.type]?.sign || 1); 
+             if (aT && aT.type !== 'stock') aT.balance -= r.amount * (ASSET_TYPES[aT.type]?.sign || 1); 
+         }
          localStorage.setItem('my_assets', JSON.stringify(assets));
          window.syncAssetsToCloud();
       }
@@ -922,7 +977,7 @@
               catSelectHtml = `<div class="relative cursor-pointer"><select onchange="window.updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>`;
            }
            const isInvoice = String(r.id).startsWith('INV');
-           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative"><div class="flex items-center space-x-3 w-[65%]"><div class="relative shrink-0" title="更換分類">${catIconHtml}</div><div class="overflow-hidden flex-1"><div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${isInvoice ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div><div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">${accountBadge}<input type="date" value="${r.date}" onchange="window.updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10" title="修改日期"><span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="window.updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註"></div></div></div><div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span><input type="number" value="${r.amount}" onchange="window.updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10" title="修改金額" inputmode="numeric"><button onclick="window.deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button></div></div>`;
+           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative"><div class="flex items-center space-x-3 w-[65%]"><div class="relative shrink-0" title="更換分類">${catIconHtml}</div><div class="overflow-hidden flex-1"><div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${isInvoice ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div><div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">${accountBadge}<input type="date" value="${r.date}" onchange="window.updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10 shrink-0" title="修改日期"><span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="window.updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註"></div></div></div><div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span><input type="number" value="${r.amount}" onchange="window.updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10" title="修改金額" inputmode="numeric"><button onclick="window.deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button></div></div>`;
          }).join('');
       }
     };
@@ -971,6 +1026,8 @@
         const type = document.getElementById('asset-type-input').value;
         const balanceWrapper = document.getElementById('asset-balance-wrapper');
         const stockFields = document.getElementById('stock-asset-fields');
+        const balanceLabel = document.getElementById('asset-balance-label');
+        
         if (type === 'stock') {
             balanceWrapper.classList.add('hidden');
             stockFields.classList.remove('hidden');
@@ -978,7 +1035,18 @@
         } else {
             balanceWrapper.classList.remove('hidden');
             stockFields.classList.add('hidden');
-            document.getElementById('asset-name-input').placeholder = "例如：台新銀行、我的錢包...";
+            
+            // 根據資產與負債改變輸入提示，避免使用者混淆
+            if (type === 'creditcard') {
+                document.getElementById('asset-name-input').placeholder = "例如：台新@GoGo卡、國泰CUBE卡...";
+                if(balanceLabel) balanceLabel.innerText = "目前已刷(欠款)金額";
+            } else if (type === 'credit' || type === 'mortgage') {
+                document.getElementById('asset-name-input').placeholder = "例如：信貸、房貸...";
+                if(balanceLabel) balanceLabel.innerText = "目前剩餘欠款";
+            } else {
+                document.getElementById('asset-name-input').placeholder = "例如：台新銀行、我的錢包...";
+                if(balanceLabel) balanceLabel.innerText = "當前餘額";
+            }
         }
     };
     
@@ -1104,7 +1172,7 @@
     };
     window.closeCategoryModal = () => { const modal = document.getElementById('category-modal'); modal.querySelector('div').classList.add('translate-y-full'); setTimeout(() => { modal.classList.add('opacity-0', 'pointer-events-none'); }, 300); };
     
-    const AVAILABLE_ICONS = ['fas fa-utensils', 'fas fa-tshirt', 'fas fa-home', 'fas fa-car', 'fas fa-book', 'fas fa-gamepad', 'fas fa-shopping-cart', 'fas fa-heart', 'fas fa-gift', 'fas fa-plane', 'fas fa-pills', 'fas fa-paw', 'fas fa-baby', 'fas fa-music', 'fas fa-laptop', 'fas fa-coffee', 'fas fa-camera', 'fas fa-dumbbell', 'fas fa-ellipsis-h', 'fas fa-hand-holding-usd', 'fas fa-coins'];
+    const AVAILABLE_ICONS = ['fas fa-utensils', 'fas fa-tshirt', 'fas fa-home', 'fas fa-car', 'fas fa-book', 'fas fa-gamepad', 'fas fa-shopping-cart', 'fas fa-heart', 'fas fa-gift', 'fas fa-plane', 'fas fa-pills', 'fas fa-paw', 'fas fa-baby', 'fas fa-music', 'fas fa-laptop', 'fas fa-coffee', 'fas fa-camera', 'fas fa-dumbbell', 'fas fa-ellipsis-h', 'fas fa-hand-holding-usd', 'fas fa-coins', 'fas fa-credit-card'];
     const AVAILABLE_COLORS = ['#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6', '#10B981', '#EF4444', '#6B7280', '#14B8A6', '#F43F5E', '#84CC16', '#FF8C00', '#2E8B57'];
     let selectedIconForCat = AVAILABLE_ICONS[0], selectedColorForCat = AVAILABLE_COLORS[0];
 
