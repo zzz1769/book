@@ -89,7 +89,7 @@
         <button onclick="closeAssetModal()" class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><i class="fas fa-times"></i></button>
       </div>
       
-      <div class="space-y-4">
+      <div class="space-y-4 flex-1 overflow-y-auto no-scrollbar">
         <input type="hidden" id="asset-id-input">
         
         <div>
@@ -116,27 +116,26 @@
           </div>
         </div>
 
-        <!-- 股票專用輸入區塊 -->
-        <div id="stock-asset-fields" class="space-y-4 hidden">
+        <!-- 股票專用輸入區塊 (多筆庫存整併) -->
+        <div id="stock-asset-fields" class="space-y-4 hidden flex-col">
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">股票代號 (支援台股上市/上櫃)</label>
             <input type="text" id="asset-stock-id-input" placeholder="例如：2330, 0050" class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 uppercase">
           </div>
-          <div class="flex space-x-3">
-            <div class="flex-1">
-              <label class="block text-xs font-medium text-gray-700 mb-1">持有股數</label>
-              <input type="number" id="asset-stock-shares-input" inputmode="numeric" placeholder="例如：1000" class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500">
+          <div class="flex-1 flex flex-col min-h-0">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-xs font-medium text-gray-700">庫存明細 (可新增多筆買進)</label>
+              <button onclick="window.addStockLot()" class="text-xs px-2 py-1 bg-blue-50 text-blue-600 font-bold rounded-lg hover:bg-blue-100 transition-colors">+ 新增一筆</button>
             </div>
-            <div class="flex-1">
-              <label class="block text-xs font-medium text-gray-700 mb-1">總成本 ($)</label>
-              <input type="number" id="asset-stock-cost-input" inputmode="numeric" placeholder="例如：500000" class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500">
+            <div id="stock-lots-container" class="space-y-2 overflow-y-auto no-scrollbar max-h-[30vh] p-1 border border-gray-100 rounded-xl bg-gray-50/50">
+               <!-- JS 動態插入庫存紀錄 -->
             </div>
           </div>
         </div>
 
       </div>
 
-      <div class="mt-6 flex space-x-3">
+      <div class="mt-6 flex space-x-3 shrink-0">
          <button id="asset-delete-btn" onclick="deleteAsset()" class="hidden px-4 py-3 bg-red-50 text-red-600 font-bold rounded-xl active:scale-95 transition-all"><i class="fas fa-trash"></i></button>
          <button onclick="saveAsset()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
            儲存資產
@@ -259,7 +258,13 @@
       <div id="view-assets" class="p-3 space-y-4 hidden h-full overflow-y-auto no-scrollbar">
          <div class="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-5 text-white shadow-md relative mt-1">
             <div class="flex justify-between items-start mb-2">
-              <h3 class="text-blue-100 text-sm font-medium">總淨資產</h3>
+              <div class="flex items-center space-x-2">
+                <h3 class="text-blue-100 text-sm font-medium">總淨資產</h3>
+                <!-- 手動更新股價按鈕 -->
+                <button onclick="window.fetchStockData(true)" class="text-blue-200 hover:text-white transition-colors" title="更新股價">
+                  <i class="fas fa-sync-alt text-xs"></i>
+                </button>
+              </div>
               <button onclick="openAssetModal()" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold transition-colors shadow-sm active:scale-95">
                 <i class="fas fa-plus mr-1"></i> 新增資產
               </button>
@@ -393,19 +398,22 @@
     let isFetchingStock = false;
 
     // ==========================================
-    // 📈 獲取台股上市/上櫃開源 API
+    // 📈 獲取台股上市/上櫃開源 API (增強解析)
     // ==========================================
-    window.fetchStockData = async () => {
-        if (twseData || isFetchingStock) return;
+    window.fetchStockData = async (force = false) => {
+        if ((twseData && !force) || isFetchingStock) return;
         isFetchingStock = true;
+        if(force) window.showToast('更新股市行情中...');
         try {
-            twseData = {};
+            if(!twseData) twseData = {};
             // 1. 抓取上市股票 (TWSE)
             const resTwse = await fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
             if (resTwse.ok) {
                 const dataTwse = await resTwse.json();
                 dataTwse.forEach(item => { 
-                    twseData[item.Code] = { name: item.Name, price: Number(item.ClosingPrice) || 0 }; 
+                    // 移除千分位逗號再轉數字，避免 NaN
+                    let priceStr = String(item.ClosingPrice).replace(/,/g, '');
+                    twseData[item.Code] = { name: item.Name, price: parseFloat(priceStr) || 0 }; 
                 });
             }
             // 2. 抓取上櫃股票 (TPEx)
@@ -413,11 +421,17 @@
             if (resTpex.ok) {
                 const dataTpex = await resTpex.json();
                 dataTpex.forEach(item => { 
-                    twseData[item.SecuritiesCompanyCode] = { name: item.CompanyName, price: Number(item.Close) || 0 }; 
+                    let priceStr = String(item.Close).replace(/,/g, '');
+                    twseData[item.SecuritiesCompanyCode] = { name: item.CompanyName, price: parseFloat(priceStr) || 0 }; 
                 });
+            }
+            if(force) {
+                window.showToast('✅ 股市行情更新成功');
+                window.renderAssetsView(); // 強制重繪
             }
         } catch (e) {
             console.error('Fetch Stock API Error:', e);
+            if(force) window.showToast('❌ 股市更新失敗，請稍後再試');
         }
         isFetchingStock = false;
     };
@@ -621,23 +635,33 @@
                const stockInfo = twseData && twseData[a.stockId];
                const currentPrice = stockInfo ? stockInfo.price : 0;
                const stockName = stockInfo ? stockInfo.name : '未知代號';
-               const marketValue = currentPrice * (a.shares || 0);
+               const marketValue = currentPrice > 0 ? currentPrice * (a.shares || 0) : (a.cost || 0); 
                
-               // 若有行情則使用市值，否則退回初始成本
-               balanceToUse = marketValue > 0 ? marketValue : (a.cost || 0); 
+               balanceToUse = marketValue;
                
                const pl = balanceToUse - (a.cost || 0);
                const plRate = a.cost > 0 ? ((pl / a.cost) * 100).toFixed(2) : 0;
                const plColor = pl >= 0 ? 'text-red-500' : 'text-green-500'; // 台灣股市紅漲綠跌
                const plSign = pl >= 0 ? '+' : '';
+               const avgCost = a.shares > 0 ? (a.cost / a.shares).toFixed(2) : '0.00';
+               const displayPrice = currentPrice > 0 ? currentPrice : '--';
 
                finalName = stockInfo ? `${stockName} 庫存` : `${a.stockId} 股票庫存`;
 
                extraInfoHtml = `
-                 <div class="mt-3 pt-3 border-t border-gray-100 flex justify-between text-xs w-full">
-                    <div class="text-gray-500">代號: <span class="font-bold text-gray-700">${a.stockId}</span></div>
-                    <div class="text-gray-500">昨收: <span class="font-bold text-gray-700">$${currentPrice}</span></div>
-                    <div class="text-gray-500">損益: <span class="font-bold ${plColor}">${plSign}$${Math.round(pl).toLocaleString()} (${plSign}${plRate}%)</span></div>
+                 <div class="mt-3 pt-3 border-t border-gray-100 flex flex-col text-xs w-full space-y-1">
+                    <div class="flex justify-between">
+                        <div class="text-gray-500">代號: <span class="font-bold text-gray-700">${a.stockId}</span></div>
+                        <div class="text-gray-500">庫存: <span class="font-bold text-gray-700">${a.shares} 股</span></div>
+                    </div>
+                    <div class="flex justify-between">
+                        <div class="text-gray-500">均價: <span class="font-bold text-gray-700">$${avgCost}</span></div>
+                        <div class="text-gray-500">昨收: <span class="font-bold text-gray-700">$${displayPrice}</span></div>
+                    </div>
+                    <div class="flex justify-between mt-1 pt-1 border-t border-gray-50">
+                        <div class="text-gray-500">總成本: <span class="font-bold text-gray-700">$${Math.round(a.cost).toLocaleString()}</span></div>
+                        <div class="text-gray-500">損益: <span class="font-bold ${plColor}">${plSign}$${Math.round(pl).toLocaleString()} (${plSign}${plRate}%)</span></div>
+                    </div>
                  </div>
                `;
            }
@@ -886,6 +910,23 @@
             stockFields.classList.add('hidden');
         }
     };
+    
+    // 動態新增庫存明細的列
+    window.addStockLot = (shares = '', cost = '') => {
+        const container = document.getElementById('stock-lots-container');
+        const row = document.createElement('div');
+        row.className = 'flex space-x-2 items-center stock-lot-row';
+        row.innerHTML = `
+            <div class="flex-1">
+                <input type="number" inputmode="numeric" placeholder="股數" value="${shares}" class="lot-shares w-full box-border p-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-blue-500">
+            </div>
+            <div class="flex-1">
+                <input type="number" inputmode="numeric" placeholder="總成本($)" value="${cost}" class="lot-cost w-full box-border p-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-blue-500">
+            </div>
+            <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 p-2 shrink-0 transition-colors"><i class="fas fa-times"></i></button>
+        `;
+        container.appendChild(row);
+    };
 
     window.openAssetModal = (id = null) => {
         const modal = document.getElementById('asset-modal'), inner = modal.querySelector('div');
@@ -899,8 +940,15 @@
            
            if (a.type === 'stock') {
                document.getElementById('asset-stock-id-input').value = a.stockId || '';
-               document.getElementById('asset-stock-shares-input').value = a.shares || '';
-               document.getElementById('asset-stock-cost-input').value = a.cost || '';
+               const container = document.getElementById('stock-lots-container');
+               container.innerHTML = '';
+               // 讀取新的多筆庫存設計 (相容舊有單筆資料)
+               const lots = a.lots || (a.shares ? [{ shares: a.shares, cost: a.cost }] : []);
+               if (lots.length === 0) {
+                   window.addStockLot();
+               } else {
+                   lots.forEach(l => window.addStockLot(l.shares, l.cost));
+               }
            } else {
                document.getElementById('asset-name-input').value = a.name; 
                document.getElementById('asset-balance-input').value = a.balance; 
@@ -913,8 +961,8 @@
            document.getElementById('asset-name-input').value = ''; 
            document.getElementById('asset-balance-input').value = ''; 
            document.getElementById('asset-stock-id-input').value = '';
-           document.getElementById('asset-stock-shares-input').value = '';
-           document.getElementById('asset-stock-cost-input').value = '';
+           document.getElementById('stock-lots-container').innerHTML = '';
+           window.addStockLot(); // 預設新增一筆空白的
            document.getElementById('asset-delete-btn').classList.add('hidden');
         }
         window.handleAssetTypeChange();
@@ -929,26 +977,41 @@
         let name = document.getElementById('asset-name-input').value.trim();
         let balance = Number(document.getElementById('asset-balance-input').value) || 0;
         let stockId = '', shares = 0, cost = 0;
+        let lots = [];
 
         if (type === 'stock') {
             stockId = document.getElementById('asset-stock-id-input').value.trim().toUpperCase();
-            shares = Number(document.getElementById('asset-stock-shares-input').value) || 0;
-            cost = Number(document.getElementById('asset-stock-cost-input').value) || 0;
-            
             if(!stockId) return window.showToast('請輸入股票代號');
-            if(!shares || !cost) return window.showToast('請輸入正確的股數與總成本');
+
+            const rows = document.querySelectorAll('.stock-lot-row');
+            let totalShares = 0;
+            let totalCost = 0;
+
+            rows.forEach(row => {
+                const s = Number(row.querySelector('.lot-shares').value) || 0;
+                const c = Number(row.querySelector('.lot-cost').value) || 0;
+                if (s > 0) {
+                    lots.push({ id: Date.now().toString() + Math.random(), shares: s, cost: c });
+                    totalShares += s;
+                    totalCost += c;
+                }
+            });
+
+            if(lots.length === 0) return window.showToast('請至少輸入一筆有效的庫存紀錄');
             
-            name = `${stockId} 股票`; // 將在渲染列表時動態抓取真實名稱覆寫
-            balance = cost; // 預設紀錄成本價
+            name = `${stockId} 股票`;
+            shares = totalShares;
+            cost = totalCost;
+            balance = cost; // 初始總成本做為暫定 balance
         } else {
             if(!name) return window.showToast('請輸入資產名稱');
         }
 
         if(id) { 
             const idx = assets.findIndex(x => x.id === id); 
-            if(idx !== -1) assets[idx] = { ...assets[idx], name, type, balance, stockId, shares, cost }; 
+            if(idx !== -1) assets[idx] = { ...assets[idx], name, type, balance, stockId, shares, cost, lots }; 
         } else { 
-            assets.push({ id: 'asset_' + Date.now(), name, type, balance, stockId, shares, cost }); 
+            assets.push({ id: 'asset_' + Date.now(), name, type, balance, stockId, shares, cost, lots }); 
         }
 
         localStorage.setItem('my_assets', JSON.stringify(assets)); 
