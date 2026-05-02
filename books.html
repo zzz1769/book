@@ -376,7 +376,7 @@
     const DEFAULT_CATEGORIES = [
       { id: 'food', name: '餐飲', icon: 'fas fa-utensils', color: '#F59E0B', type: 'expense', keywords: [] },
       { id: 'clothes', name: '服飾', icon: 'fas fa-tshirt', color: '#EC4899', type: 'expense', keywords: [] },
-      { id: 'housing', name: '居住', icon: 'fas fa-home', color: '#8B5CF6', type: 'expense', keywords: [] },
+      { id: 'housing', name: '居住', icon: '居住', icon: 'fas fa-home', color: '#8B5CF6', type: 'expense', keywords: [] },
       { id: 'transport', name: '交通', icon: 'fas fa-car', color: '#3B82F6', type: 'expense', keywords: [] },
       { id: 'education', name: '學習', icon: 'fas fa-book', color: '#10B981', type: 'expense', keywords: [] },
       { id: 'entertainment', name: '娛樂', icon: 'fas fa-gamepad', color: '#EF4444', type: 'expense', keywords: [] },
@@ -394,7 +394,7 @@
     let isFetchingStock = false;
 
     // ==========================================
-    // 📈 獲取台股上市/上櫃開源 API (搭配 CORS Proxy)
+    // 📈 獲取台股上市/上櫃開源 API (搭配多重 CORS Proxy 備援)
     // ==========================================
     window.fetchStockData = async (force = false) => {
         if ((twseData && !force) || isFetchingStock) return;
@@ -403,25 +403,41 @@
         try {
             if(!twseData) twseData = {};
             
-            // 透過 AllOrigins CORS Proxy 繞過瀏覽器限制
-            const proxyUrl = 'https://api.allorigins.win/raw?url=';
-            
-            const resTwse = await fetch(proxyUrl + encodeURIComponent('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL'));
-            if (resTwse.ok) {
-                const dataTwse = await resTwse.json();
+            // 建立多個 Proxy 作為備援，避免單一 Proxy 被證交所阻擋 (522 錯誤)
+            const proxies = [
+                'https://corsproxy.io/?',
+                'https://api.codetabs.com/v1/proxy?quest=',
+                'https://api.allorigins.win/raw?url='
+            ];
+
+            const fetchWithFallback = async (targetUrl) => {
+                for (let proxy of proxies) {
+                    try {
+                        const res = await fetch(proxy + encodeURIComponent(targetUrl));
+                        if (res.ok) return await res.json();
+                    } catch (e) {
+                        console.warn(`Proxy ${proxy} failed.`);
+                    }
+                }
+                throw new Error('All proxies failed');
+            };
+
+            const dataTwse = await fetchWithFallback('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+            if (dataTwse && Array.isArray(dataTwse)) {
                 dataTwse.forEach(item => { 
                     let priceStr = String(item.ClosingPrice).replace(/,/g, '');
                     twseData[item.Code] = { name: item.Name, price: parseFloat(priceStr) || 0 }; 
                 });
             }
-            const resTpex = await fetch(proxyUrl + encodeURIComponent('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes'));
-            if (resTpex.ok) {
-                const dataTpex = await resTpex.json();
+
+            const dataTpex = await fetchWithFallback('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes');
+            if (dataTpex && Array.isArray(dataTpex)) {
                 dataTpex.forEach(item => { 
                     let priceStr = String(item.Close).replace(/,/g, '');
                     twseData[item.SecuritiesCompanyCode] = { name: item.CompanyName, price: parseFloat(priceStr) || 0 }; 
                 });
             }
+
             if(force) {
                 window.showToast('✅ 股市行情更新成功');
                 window.renderAssetsView(); 
