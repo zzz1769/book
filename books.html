@@ -182,13 +182,13 @@
           </div>
           
           <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-4 shrink-0 w-full">
-            <!-- 調整：使用 grid 強制平分寬度，防止日期與資產帳戶跑版 -->
-            <div class="grid grid-cols-2 gap-3 w-full">
-              <div id="date-section" class="w-full min-w-0">
+            <!-- 調整：使用 flex 限制日期寬度並縮小字體，避免在手機上撐破版面 -->
+            <div class="flex space-x-2 w-full">
+              <div id="date-section" class="w-[120px] shrink-0">
                 <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
-                <input type="date" id="input-date" class="w-full min-w-0 box-border px-2 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block relative z-10">
+                <input type="date" id="input-date" class="appearance-none w-full box-border px-1 py-2.5 text-[13px] tracking-tighter sm:text-sm sm:tracking-normal bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block relative z-10 text-center">
               </div>
-              <div id="asset-single-section" class="w-full min-w-0">
+              <div id="asset-single-section" class="flex-1 min-w-0">
                 <label class="block text-xs font-medium text-gray-700 mb-1">資產帳戶</label>
                 <select id="input-asset" class="w-full min-w-0 box-border px-2 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block truncate"></select>
               </div>
