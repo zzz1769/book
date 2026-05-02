@@ -17,7 +17,7 @@
 </head>
 <body class="bg-gray-100 flex items-center justify-center font-sans h-[100dvh] overflow-hidden relative">
 
-  <!-- ================= 認證登入畫面 ================= -->
+  <!-- ================= 認證登入畫面 (Google Firebase Auth) ================= -->
   <div id="auth-screen" class="fixed inset-0 bg-gray-900/95 z-[100] flex flex-col items-center justify-center transition-opacity duration-300">
     <div class="bg-white p-8 rounded-[2rem] shadow-2xl w-11/12 max-w-sm text-center transform transition-transform">
       <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -28,7 +28,7 @@
       
       <p id="auth-error" class="text-red-500 text-xs mb-4 h-auto opacity-0 transition-opacity">錯誤訊息</p>
       
-      <button id="auth-submit-btn" onclick="signInWithGoogle()" class="w-full flex items-center justify-center py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-sm transition-all active:scale-[0.98] mb-4">
+      <button id="auth-submit-btn" onclick="window.signInWithGoogle()" class="w-full flex items-center justify-center py-3.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-bold rounded-xl shadow-sm transition-all active:scale-[0.98] mb-4">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5 mr-3" alt="Google">
         <span id="auth-btn-text">使用 Google 帳號登入</span>
       </button>
@@ -40,7 +40,7 @@
     <div class="bg-white rounded-t-[2rem] md:rounded-[2rem] w-full max-w-[400px] p-6 pb-10 shadow-2xl transform transition-transform translate-y-full md:translate-y-0 h-[85vh] flex flex-col">
       <div class="flex justify-between items-center mb-4 shrink-0">
         <h3 id="cat-modal-title" class="text-lg font-bold text-gray-800">新增分類</h3>
-        <button onclick="closeCategoryModal()" class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
+        <button onclick="window.closeCategoryModal()" class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200">
           <i class="fas fa-times"></i>
         </button>
       </div>
@@ -73,8 +73,8 @@
       </div>
 
       <div class="mt-4 pt-4 border-t border-gray-100 flex space-x-3 shrink-0">
-         <button id="cat-delete-btn" onclick="deleteCurrentCategory()" class="hidden px-4 py-3 bg-red-50 text-red-600 font-bold rounded-xl active:scale-95 transition-all"><i class="fas fa-trash"></i></button>
-         <button onclick="saveCategory()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
+         <button id="cat-delete-btn" onclick="window.deleteCurrentCategory()" class="hidden px-4 py-3 bg-red-50 text-red-600 font-bold rounded-xl active:scale-95 transition-all"><i class="fas fa-trash"></i></button>
+         <button onclick="window.saveCategory()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
            儲存分類
          </button>
       </div>
@@ -83,10 +83,10 @@
 
   <!-- 資產管理彈出視窗 (Modal) -->
   <div id="asset-modal" class="fixed inset-0 bg-gray-900/80 z-[120] flex flex-col items-center justify-end md:justify-center transition-opacity duration-300 opacity-0 pointer-events-none">
-    <div class="bg-white rounded-t-[2rem] md:rounded-[2rem] w-full max-w-[400px] p-6 pb-10 shadow-2xl transform transition-transform translate-y-full md:translate-y-0 h-auto flex flex-col">
-      <div class="flex justify-between items-center mb-4">
+    <div class="bg-white rounded-t-[2rem] md:rounded-[2rem] w-full max-w-[400px] p-6 pb-10 shadow-2xl transform transition-transform translate-y-full md:translate-y-0 h-auto flex flex-col max-h-[90vh]">
+      <div class="flex justify-between items-center mb-4 shrink-0">
         <h3 id="asset-modal-title" class="text-lg font-bold text-gray-800">新增資產</h3>
-        <button onclick="closeAssetModal()" class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><i class="fas fa-times"></i></button>
+        <button onclick="window.closeAssetModal()" class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><i class="fas fa-times"></i></button>
       </div>
       
       <div class="space-y-4 flex-1 overflow-y-auto no-scrollbar">
@@ -97,8 +97,8 @@
           <select id="asset-type-input" onchange="window.handleAssetTypeChange()" class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500">
             <option value="cash">現金</option>
             <option value="deposit">存款</option>
-            <option value="investment">投資</option>
-            <option value="stock">股票庫存</option>
+            <option value="investment">投資 (基金/虛擬幣等)</option>
+            <option value="stock">股票庫存 (證券戶)</option>
             <option value="credit">信用貸款</option>
             <option value="mortgage">房屋貸款</option>
           </select>
@@ -107,25 +107,21 @@
         <!-- 一般資產輸入區塊 -->
         <div id="standard-asset-fields" class="space-y-4">
           <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">資產名稱</label>
-            <input type="text" id="asset-name-input" placeholder="例如：台新銀行、台股戶頭..." class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500">
+            <label class="block text-xs font-medium text-gray-700 mb-1">資產名稱 (例如帳戶名稱)</label>
+            <input type="text" id="asset-name-input" placeholder="例如：台新銀行、元大證券..." class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500">
           </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">當前金額 (可自由設定異動)</label>
+          <div id="asset-balance-wrapper">
+            <label class="block text-xs font-medium text-gray-700 mb-1">當前金額</label>
             <input type="number" id="asset-balance-input" inputmode="numeric" class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500" placeholder="0">
           </div>
         </div>
 
         <!-- 股票專用輸入區塊 (多筆庫存整併) -->
-        <div id="stock-asset-fields" class="space-y-4 hidden flex-col">
-          <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">股票代號 (支援台股上市/上櫃)</label>
-            <input type="text" id="asset-stock-id-input" placeholder="例如：2330, 0050" class="w-full box-border p-3 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-500 uppercase">
-          </div>
+        <div id="stock-asset-fields" class="space-y-3 hidden flex-col mt-4 border-t border-gray-100 pt-3">
           <div class="flex-1 flex flex-col min-h-0">
             <div class="flex justify-between items-center mb-2">
-              <label class="block text-xs font-medium text-gray-700">庫存明細 (可新增多筆買進)</label>
-              <button onclick="window.addStockLot()" class="text-xs px-2 py-1 bg-blue-50 text-blue-600 font-bold rounded-lg hover:bg-blue-100 transition-colors">+ 新增一筆</button>
+              <label class="block text-xs font-medium text-gray-700">股票庫存明細 <span class="text-[10px] text-gray-400 font-normal">(可新增多檔股票)</span></label>
+              <button onclick="window.addStockLot()" class="text-xs px-2 py-1 bg-blue-50 text-blue-600 font-bold rounded-lg hover:bg-blue-100 transition-colors shadow-sm">+ 新增一筆</button>
             </div>
             <div id="stock-lots-container" class="space-y-2 overflow-y-auto no-scrollbar max-h-[30vh] p-1 border border-gray-100 rounded-xl bg-gray-50/50">
                <!-- JS 動態插入庫存紀錄 -->
@@ -136,8 +132,8 @@
       </div>
 
       <div class="mt-6 flex space-x-3 shrink-0">
-         <button id="asset-delete-btn" onclick="deleteAsset()" class="hidden px-4 py-3 bg-red-50 text-red-600 font-bold rounded-xl active:scale-95 transition-all"><i class="fas fa-trash"></i></button>
-         <button onclick="saveAsset()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
+         <button id="asset-delete-btn" onclick="window.deleteAsset()" class="hidden px-4 py-3 bg-red-50 text-red-600 font-bold rounded-xl active:scale-95 transition-all"><i class="fas fa-trash"></i></button>
+         <button onclick="window.saveAsset()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-[0.98]">
            儲存資產
          </button>
       </div>
@@ -166,9 +162,9 @@
       <!-- ================= [頁面一] 記帳 (Add) ================= -->
       <div id="view-add" class="p-3 flex-1 flex flex-col">
         <div class="flex bg-gray-200 p-1 rounded-xl mb-3 shrink-0">
-          <button id="btn-type-expense" onclick="setTxType('expense')" class="flex-1 py-1.5 text-sm font-bold bg-white shadow-sm rounded-lg text-gray-800 transition-colors">支出</button>
-          <button id="btn-type-income" onclick="setTxType('income')" class="flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors">收入</button>
-          <button id="btn-type-transfer" onclick="setTxType('transfer')" class="flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors">移轉</button>
+          <button id="btn-type-expense" onclick="window.setTxType('expense')" class="flex-1 py-1.5 text-sm font-bold bg-white shadow-sm rounded-lg text-gray-800 transition-colors">支出</button>
+          <button id="btn-type-income" onclick="window.setTxType('income')" class="flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors">收入</button>
+          <button id="btn-type-transfer" onclick="window.setTxType('transfer')" class="flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors">移轉</button>
         </div>
 
         <div id="category-section" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-3 shrink-0">
@@ -208,7 +204,7 @@
           </div>
         </div>
 
-        <button onclick="addRecord()" class="w-full mt-3 py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl shadow-md shadow-blue-200 transition-all active:scale-[0.98] shrink-0">
+        <button onclick="window.addRecord()" class="w-full mt-3 py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold rounded-xl shadow-md shadow-blue-200 transition-all active:scale-[0.98] shrink-0">
           儲存紀錄
         </button>
       </div>
@@ -226,15 +222,15 @@
           </select>
         </div>
         <div class="flex bg-gray-200 p-1 rounded-lg">
-           <button id="stats-type-expense" onclick="setStatsType('expense')" class="flex-1 py-1 text-xs font-bold bg-white shadow-sm rounded text-gray-800 transition-colors">支出分析</button>
-           <button id="stats-type-income" onclick="setStatsType('income')" class="flex-1 py-1 text-xs font-bold text-gray-500 rounded transition-colors">收入分析</button>
+           <button id="stats-type-expense" onclick="window.setStatsType('expense')" class="flex-1 py-1 text-xs font-bold bg-white shadow-sm rounded text-gray-800 transition-colors">支出分析</button>
+           <button id="stats-type-income" onclick="window.setStatsType('income')" class="flex-1 py-1 text-xs font-bold text-gray-500 rounded transition-colors">收入分析</button>
         </div>
         <div class="flex space-x-2">
           <div class="relative flex-1">
             <i class="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
-            <input type="text" id="input-search" placeholder="搜尋備註與分類..." oninput="handleSearch()" class="w-full pl-9 p-2.5 text-sm font-medium bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors shadow-sm">
+            <input type="text" id="input-search" placeholder="搜尋備註與分類..." oninput="window.handleSearch()" class="w-full pl-9 p-2.5 text-sm font-medium bg-white border border-gray-200 rounded-xl outline-none focus:border-blue-500 transition-colors shadow-sm">
           </div>
-          <button id="btn-clear-filter" onclick="clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm whitespace-nowrap active:scale-95">清除篩選</button>
+          <button id="btn-clear-filter" onclick="window.clearCategoryFilter()" class="hidden px-3 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200 transition-colors shadow-sm whitespace-nowrap active:scale-95">清除篩選</button>
         </div>
         <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 text-white shadow-md relative overflow-hidden">
           <h3 id="stats-title-text" class="text-blue-100 text-xs font-medium mb-1 transition-all duration-300 transform origin-left">本月總額</h3>
@@ -265,7 +261,7 @@
                   <i class="fas fa-sync-alt text-xs"></i>
                 </button>
               </div>
-              <button onclick="openAssetModal()" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold transition-colors shadow-sm active:scale-95">
+              <button onclick="window.openAssetModal()" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold transition-colors shadow-sm active:scale-95">
                 <i class="fas fa-plus mr-1"></i> 新增資產
               </button>
             </div>
@@ -282,7 +278,7 @@
               <h2 class="text-lg font-bold text-gray-800">分類與發票關鍵字</h2>
               <p class="text-xs text-gray-500 mt-1">管理分類並設定發票自動歸類規則。</p>
             </div>
-            <button onclick="openCategoryModal()" class="shrink-0 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"><i class="fas fa-plus"></i> 新增</button>
+            <button onclick="window.openCategoryModal()" class="shrink-0 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"><i class="fas fa-plus"></i> 新增</button>
           </div>
           <div class="p-4"><div id="settings-category-list" class="space-y-2 max-h-60 overflow-y-auto no-scrollbar"></div></div>
         </div>
@@ -294,7 +290,7 @@
           </div>
           <div class="p-4">
             <div class="relative">
-              <input type="file" id="import-invoice-file" accept=".csv" onchange="importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+              <input type="file" id="import-invoice-file" accept=".csv" onchange="window.importInvoiceCSV(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
               <button class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-bold shadow-sm pointer-events-none transition-all hover:bg-orange-100"><i class="fas fa-file-invoice mr-2"></i> 匯入財政部發票 CSV</button>
             </div>
           </div>
@@ -308,11 +304,11 @@
             </div>
           </div>
           <div class="p-4 space-y-3">
-            <button onclick="executeDriveUpload(false)" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fab fa-google-drive mr-2"></i> 額外備份至 Google Drive</button>
-            <button onclick="syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fas fa-sync mr-2"></i> 從 Drive 下載合併</button>
-            <button onclick="exportData()" class="w-full flex items-center justify-center py-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium"><i class="fas fa-download mr-2"></i> 下載備份檔 (JSON)</button>
+            <button onclick="window.executeDriveUpload(false)" class="w-full flex items-center justify-center py-2.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fab fa-google-drive mr-2"></i> 額外備份至 Google Drive</button>
+            <button onclick="window.syncFromDriveManual()" class="w-full flex items-center justify-center py-2.5 bg-green-100 text-green-700 rounded-lg text-sm font-bold shadow-sm active:scale-95 transition-all"><i class="fas fa-sync mr-2"></i> 從 Drive 下載合併</button>
+            <button onclick="window.exportData()" class="w-full flex items-center justify-center py-2.5 bg-gray-50 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium"><i class="fas fa-download mr-2"></i> 下載備份檔 (JSON)</button>
             <div class="relative">
-              <input type="file" id="import-file" accept=".json" onchange="importData(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+              <input type="file" id="import-file" accept=".json" onchange="window.importData(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
               <button class="w-full flex items-center justify-center py-2.5 bg-gray-50 text-gray-600 rounded-lg text-sm font-medium border border-gray-200 pointer-events-none transition-all"><i class="fas fa-upload mr-2"></i> 從 JSON 檔案還原</button>
             </div>
           </div>
@@ -320,10 +316,10 @@
         
         <div class="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden mt-4">
            <div class="p-4 space-y-3">
-             <button onclick="handleLogout()" class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-medium">
+             <button onclick="window.handleLogout()" class="w-full flex items-center justify-center py-2.5 bg-orange-50 text-orange-600 rounded-lg text-sm font-medium">
                 <i class="fas fa-sign-out-alt mr-2"></i> 登出帳號
              </button>
-             <button onclick="clearAllData()" class="w-full flex items-center justify-center py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium">
+             <button onclick="window.clearAllData()" class="w-full flex items-center justify-center py-2.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium">
                 <i class="fas fa-trash-alt mr-2"></i> 清空所有資料
               </button>
            </div>
@@ -334,10 +330,10 @@
 
     <!-- 底部導覽列 -->
     <nav class="bg-white border-t border-gray-100 px-2 pt-2 pb-6 md:pb-2 flex justify-around items-center z-10 w-full shrink-0">
-      <button onclick="switchTab('stats')" id="nav-stats" class="flex-1 flex flex-col items-center space-y-1 text-gray-400 transition-colors"><i class="fas fa-chart-pie text-xl"></i><span class="text-[10px] font-medium">統計</span></button>
-      <button onclick="switchTab('add')" id="nav-add" class="flex-1 flex flex-col items-center space-y-1 text-blue-600 transition-colors"><i class="fas fa-plus-circle text-2xl"></i><span class="text-[10px] font-medium">記帳</span></button>
-      <button onclick="switchTab('assets')" id="nav-assets" class="flex-1 flex flex-col items-center space-y-1 text-gray-400 transition-colors"><i class="fas fa-wallet text-xl"></i><span class="text-[10px] font-medium">資產</span></button>
-      <button onclick="switchTab('settings')" id="nav-settings" class="flex-1 flex flex-col items-center space-y-1 text-gray-400 transition-colors"><i class="fas fa-cog text-xl"></i><span class="text-[10px] font-medium">設定</span></button>
+      <button onclick="window.switchTab('stats')" id="nav-stats" class="flex-1 flex flex-col items-center space-y-1 text-gray-400 transition-colors"><i class="fas fa-chart-pie text-xl"></i><span class="text-[10px] font-medium">統計</span></button>
+      <button onclick="window.switchTab('add')" id="nav-add" class="flex-1 flex flex-col items-center space-y-1 text-blue-600 transition-colors"><i class="fas fa-plus-circle text-2xl"></i><span class="text-[10px] font-medium">記帳</span></button>
+      <button onclick="window.switchTab('assets')" id="nav-assets" class="flex-1 flex flex-col items-center space-y-1 text-gray-400 transition-colors"><i class="fas fa-wallet text-xl"></i><span class="text-[10px] font-medium">資產</span></button>
+      <button onclick="window.switchTab('settings')" id="nav-settings" class="flex-1 flex flex-col items-center space-y-1 text-gray-400 transition-colors"><i class="fas fa-cog text-xl"></i><span class="text-[10px] font-medium">設定</span></button>
     </nav>
   </div>
 
@@ -398,7 +394,7 @@
     let isFetchingStock = false;
 
     // ==========================================
-    // 📈 獲取台股上市/上櫃開源 API (增強解析)
+    // 📈 獲取台股上市/上櫃開源 API (搭配 CORS Proxy)
     // ==========================================
     window.fetchStockData = async (force = false) => {
         if ((twseData && !force) || isFetchingStock) return;
@@ -406,18 +402,19 @@
         if(force) window.showToast('更新股市行情中...');
         try {
             if(!twseData) twseData = {};
-            // 1. 抓取上市股票 (TWSE)
-            const resTwse = await fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+            
+            // 透過 AllOrigins CORS Proxy 繞過瀏覽器限制
+            const proxyUrl = 'https://api.allorigins.win/raw?url=';
+            
+            const resTwse = await fetch(proxyUrl + encodeURIComponent('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL'));
             if (resTwse.ok) {
                 const dataTwse = await resTwse.json();
                 dataTwse.forEach(item => { 
-                    // 移除千分位逗號再轉數字，避免 NaN
                     let priceStr = String(item.ClosingPrice).replace(/,/g, '');
                     twseData[item.Code] = { name: item.Name, price: parseFloat(priceStr) || 0 }; 
                 });
             }
-            // 2. 抓取上櫃股票 (TPEx)
-            const resTpex = await fetch('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes');
+            const resTpex = await fetch(proxyUrl + encodeURIComponent('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes'));
             if (resTpex.ok) {
                 const dataTpex = await resTpex.json();
                 dataTpex.forEach(item => { 
@@ -427,7 +424,8 @@
             }
             if(force) {
                 window.showToast('✅ 股市行情更新成功');
-                window.renderAssetsView(); // 強制重繪
+                window.renderAssetsView(); 
+                window.renderAssetSelects(); 
             }
         } catch (e) {
             console.error('Fetch Stock API Error:', e);
@@ -437,9 +435,9 @@
     };
 
     // ==========================================
-    // 🛠️ 資料強固與清洗機制 (防止舊資料當機)
+    // 🛠️ 資料強固與清洗機制
     // ==========================================
-    function sanitizeRecords(arr) {
+    window.sanitizeRecords = (arr) => {
         if (!Array.isArray(arr)) return [];
         return arr.map(r => {
             let derivedType = r.type;
@@ -462,7 +460,7 @@
                 assetId: r.assetId || (r.type !== 'transfer' ? (assets[0]?.id || 'asset_cash') : undefined)
             };
         }).sort((a, b) => new Date(b.date) - new Date(a.date));
-    }
+    };
 
     try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } 
     categories.forEach(c => { if(!c.type) c.type = 'expense'; }); if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
@@ -471,10 +469,10 @@
     if(!Array.isArray(assets) || assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
     
     try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } 
-    records = sanitizeRecords(records); 
+    records = window.sanitizeRecords(records); 
 
     // ==========================================
-    // 🔒 認證與登入邏輯
+    // 🔒 認證與登入邏輯 (Firebase)
     // ==========================================
     window.signInWithGoogle = async () => {
        if (isSigningIn) return; isSigningIn = true;
@@ -533,7 +531,7 @@
       if (!currentUser) return;
       unsubscribeFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), (docSnap) => {
         if (docSnap.exists() && docSnap.data().list) {
-            records = sanitizeRecords(docSnap.data().list); 
+            records = window.sanitizeRecords(docSnap.data().list); 
             localStorage.setItem('my_expenses', JSON.stringify(records));
             window.initDateFilters(); if (currentTab === 'stats') window.updateStatsView();
         } else { window.syncExpensesToCloud(); }
@@ -560,6 +558,7 @@
     // 💼 核心視圖邏輯
     // ==========================================
     window.showToast = (msg) => { const toast = document.getElementById('toast'); document.getElementById('toast-msg').innerText = msg; toast.classList.remove('opacity-0'); setTimeout(() => toast.classList.add('opacity-0'), 2000); };
+    
     window.switchTab = (tab) => {
       currentTab = tab;
       ['add', 'stats', 'assets', 'settings'].forEach(t => document.getElementById(`view-${t}`).classList.add('hidden'));
@@ -575,12 +574,16 @@
       currentTxType = type;
       ['expense', 'income', 'transfer'].forEach(t => {
          const btn = document.getElementById(`btn-type-${t}`);
-         btn.className = (t === type) ? 'flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors bg-white shadow-sm text-gray-800' : 'flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors text-gray-500';
+         btn.className = (t === type) ? 'flex-1 py-1.5 text-sm font-bold bg-white shadow-sm rounded-lg text-gray-800 transition-colors' : 'flex-1 py-1.5 text-sm font-bold text-gray-500 rounded-lg transition-colors';
       });
       if (type === 'transfer') {
-         document.getElementById('category-section').classList.add('hidden'); document.getElementById('asset-single-section').classList.add('hidden'); document.getElementById('asset-transfer-section').classList.remove('hidden');
+         document.getElementById('category-section').classList.add('hidden'); 
+         document.getElementById('asset-single-section').classList.add('hidden'); 
+         document.getElementById('asset-transfer-section').classList.remove('hidden');
       } else {
-         document.getElementById('category-section').classList.remove('hidden'); document.getElementById('asset-single-section').classList.remove('hidden'); document.getElementById('asset-transfer-section').classList.add('hidden');
+         document.getElementById('category-section').classList.remove('hidden'); 
+         document.getElementById('asset-single-section').classList.remove('hidden'); 
+         document.getElementById('asset-transfer-section').classList.add('hidden');
          window.renderCategories(); 
       }
     };
@@ -590,19 +593,20 @@
             let displayBalance = a.balance;
             let displayName = a.name;
             if (a.type === 'stock') {
-                if (twseData && twseData[a.stockId]) {
-                    displayBalance = twseData[a.stockId].price * (a.shares || 0);
-                    displayName = `${twseData[a.stockId].name} (${a.stockId})`;
-                } else {
-                    displayBalance = a.cost || 0;
-                    displayName = `${a.stockId} 股票庫存`;
+                if (twseData) {
+                    let totalMv = 0;
+                    (a.lots || []).forEach(l => {
+                        const price = twseData[l.stockId] ? twseData[l.stockId].price : 0;
+                        totalMv += price > 0 ? price * l.shares : l.cost;
+                    });
+                    if (a.lots && a.lots.length > 0) displayBalance = totalMv;
                 }
             }
             return `<option value="${a.id}">${displayName} ($${Math.round(displayBalance).toLocaleString()})</option>`;
         }).join('');
-        document.getElementById('input-asset').innerHTML = options; 
-        document.getElementById('input-asset-from').innerHTML = options; 
-        document.getElementById('input-asset-to').innerHTML = options;
+        const inA = document.getElementById('input-asset'); if(inA) inA.innerHTML = options;
+        const inF = document.getElementById('input-asset-from'); if(inF) inF.innerHTML = options;
+        const inT = document.getElementById('input-asset-to'); if(inT) inT.innerHTML = options;
     };
 
     window.renderAssetsView = async () => {
@@ -628,39 +632,77 @@
            const typeInfo = ASSET_TYPES[a.type] || ASSET_TYPES['cash'];
            let balanceToUse = a.balance;
            let extraInfoHtml = '';
-           let finalName = a.name;
 
-           // 若為股票庫存，即時計算市值與損益
            if (a.type === 'stock') {
-               const stockInfo = twseData && twseData[a.stockId];
-               const currentPrice = stockInfo ? stockInfo.price : 0;
-               const stockName = stockInfo ? stockInfo.name : '未知代號';
-               const marketValue = currentPrice > 0 ? currentPrice * (a.shares || 0) : (a.cost || 0); 
-               
-               balanceToUse = marketValue;
-               
-               const pl = balanceToUse - (a.cost || 0);
-               const plRate = a.cost > 0 ? ((pl / a.cost) * 100).toFixed(2) : 0;
-               const plColor = pl >= 0 ? 'text-red-500' : 'text-green-500'; // 台灣股市紅漲綠跌
-               const plSign = pl >= 0 ? '+' : '';
-               const avgCost = a.shares > 0 ? (a.cost / a.shares).toFixed(2) : '0.00';
-               const displayPrice = currentPrice > 0 ? currentPrice : '--';
+               let totalMarketValue = 0;
+               let totalCost = 0;
+               let groups = {};
 
-               finalName = stockInfo ? `${stockName} 庫存` : `${a.stockId} 股票庫存`;
+               // 相容舊資料邏輯
+               const lots = a.lots || [];
+               if (lots.length === 0 && a.stockId) {
+                   lots.push({ stockId: a.stockId, shares: a.shares || 0, cost: a.cost || 0 });
+               }
+
+               // 將相同代號的股票彙整 (總股數與總成本)
+               lots.forEach(l => {
+                   if (!l.stockId) return;
+                   if (!groups[l.stockId]) groups[l.stockId] = { shares: 0, cost: 0 };
+                   groups[l.stockId].shares += Number(l.shares);
+                   groups[l.stockId].cost += Number(l.cost);
+               });
+
+               let stocksHtml = Object.keys(groups).map(sid => {
+                   const g = groups[sid];
+                   const stockInfo = twseData && twseData[sid];
+                   const currentPrice = stockInfo ? stockInfo.price : 0;
+                   const stockName = stockInfo ? stockInfo.name : '未上市/無資料';
+                   const marketValue = currentPrice > 0 ? currentPrice * g.shares : g.cost;
+                   
+                   totalMarketValue += marketValue;
+                   totalCost += g.cost;
+
+                   const pl = marketValue - g.cost;
+                   const plRate = g.cost > 0 ? ((pl / g.cost) * 100).toFixed(2) : 0;
+                   const plColor = pl > 0 ? 'text-red-500' : (pl < 0 ? 'text-green-500' : 'text-gray-500');
+                   const plSign = pl > 0 ? '+' : '';
+                   const avgCost = g.shares > 0 ? (g.cost / g.shares).toFixed(2) : '0.00';
+                   const displayPrice = currentPrice > 0 ? currentPrice : '--';
+
+                   return `
+                     <div class="flex flex-col text-[11px] bg-gray-50/80 rounded-lg p-2.5">
+                       <div class="flex justify-between font-bold text-gray-700 mb-1">
+                         <span class="text-xs">${sid} ${stockName}</span>
+                         <span>${g.shares.toLocaleString()} 股</span>
+                       </div>
+                       <div class="flex justify-between text-gray-500 mb-0.5">
+                         <span>均價 $${avgCost} | 昨收 $${displayPrice}</span>
+                         <span>成本 $${Math.round(g.cost).toLocaleString()}</span>
+                       </div>
+                       <div class="flex justify-between items-center mt-1 pt-1 border-t border-gray-200/50">
+                         <span class="text-gray-500">市值 $${Math.round(marketValue).toLocaleString()}</span>
+                         <span class="font-bold ${plColor}">${plSign}$${Math.round(pl).toLocaleString()} (${plSign}${plRate}%)</span>
+                       </div>
+                     </div>
+                   `;
+               }).join('');
+
+               // 如果這個證券戶完全沒有任何庫存
+               if (Object.keys(groups).length === 0) {
+                   stocksHtml = `<div class="text-center text-gray-400 text-xs py-2">目前尚無庫存股票</div>`;
+               }
+
+               balanceToUse = totalMarketValue;
+               const totalPl = totalMarketValue - totalCost;
+               const totalPlColor = totalPl > 0 ? 'text-red-500' : (totalPl < 0 ? 'text-green-500' : 'text-gray-500');
+               const totalPlSign = totalPl > 0 ? '+' : '';
 
                extraInfoHtml = `
-                 <div class="mt-3 pt-3 border-t border-gray-100 flex flex-col text-xs w-full space-y-1">
-                    <div class="flex justify-between">
-                        <div class="text-gray-500">代號: <span class="font-bold text-gray-700">${a.stockId}</span></div>
-                        <div class="text-gray-500">庫存: <span class="font-bold text-gray-700">${a.shares} 股</span></div>
-                    </div>
-                    <div class="flex justify-between">
-                        <div class="text-gray-500">均價: <span class="font-bold text-gray-700">$${avgCost}</span></div>
-                        <div class="text-gray-500">昨收: <span class="font-bold text-gray-700">$${displayPrice}</span></div>
-                    </div>
-                    <div class="flex justify-between mt-1 pt-1 border-t border-gray-50">
-                        <div class="text-gray-500">總成本: <span class="font-bold text-gray-700">$${Math.round(a.cost).toLocaleString()}</span></div>
-                        <div class="text-gray-500">損益: <span class="font-bold ${plColor}">${plSign}$${Math.round(pl).toLocaleString()} (${plSign}${plRate}%)</span></div>
+                 <div class="mt-3 pt-3 border-t border-gray-100 flex flex-col w-full space-y-2">
+                    ${stocksHtml}
+                    <div class="flex justify-between items-center text-xs font-bold pt-1 px-1">
+                        <span class="text-gray-600">總成本: $${Math.round(totalCost).toLocaleString()}</span>
+                        <span class="${totalPlColor}">總損益: ${totalPlSign}$${Math.round(totalPl).toLocaleString()}</span>
                     </div>
                  </div>
                `;
@@ -674,7 +716,7 @@
                     <div class="flex items-center space-x-4">
                         <div class="w-10 h-10 rounded-full flex items-center justify-center text-white" style="background-color: ${typeInfo.color}"><i class="${typeInfo.icon} text-lg"></i></div>
                         <div>
-                            <div class="font-bold text-gray-800 text-sm">${finalName}</div>
+                            <div class="font-bold text-gray-800 text-sm">${a.name}</div>
                             <div class="text-[10px] text-gray-400">${typeInfo.name}</div>
                         </div>
                     </div>
@@ -710,11 +752,11 @@
       const amount = Number(document.getElementById('input-amount').value);
       if(!amount || amount <= 0) return window.showToast('請輸入有效的金額！');
       const record = { id: String(Date.now()), type: currentTxType, amount, date: document.getElementById('input-date').value, note: document.getElementById('input-note').value.trim() };
+      
       if (currentTxType === 'expense' || currentTxType === 'income') {
          record.cat = selectedCategoryId; record.assetId = document.getElementById('input-asset').value;
          const a = assets.find(x => x.id === record.assetId); 
          if(a && a.type !== 'stock') {
-             // 僅對非股票的資產自動扣除/增加現金流
              a.balance += (currentTxType === 'income' ? amount : -amount);
          }
       } else if (currentTxType === 'transfer') {
@@ -724,10 +766,12 @@
          if(aF && aF.type !== 'stock') aF.balance -= amount; 
          if(aT && aT.type !== 'stock') aT.balance += amount;
       }
+      
       records.push(record); records.sort((a, b) => new Date(b.date) - new Date(a.date));
       localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets));
       document.getElementById('input-amount').value = ''; document.getElementById('input-note').value = '';
-      window.initDateFilters(); window.renderAssetSelects(); if(currentTab === 'assets') window.renderAssetsView(); window.showToast('✅ 記帳成功！');
+      window.initDateFilters(); window.renderAssetSelects(); if(currentTab === 'assets') window.renderAssetsView(); 
+      window.showToast('✅ 記帳成功！');
       window.syncExpensesToCloud(); window.syncAssetsToCloud();
     };
 
@@ -740,11 +784,16 @@
           if (r.type === 'expense') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance -= diff; } 
           else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance += diff; } 
           else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF && aF.type !== 'stock') aF.balance -= diff; if (aT && aT.type !== 'stock') aT.balance += diff; }
-          localStorage.setItem('my_assets', JSON.stringify(assets)); window.syncAssetsToCloud();
+          localStorage.setItem('my_assets', JSON.stringify(assets));
+          window.syncAssetsToCloud();
       } else if (field === 'note') value = String(value).trim();
-      r[field] = value; if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
-      localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud();
+      
+      r[field] = value; 
+      if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      
+      localStorage.setItem('my_expenses', JSON.stringify(records)); 
       window.updateStatsView(); window.renderAssetSelects(); window.showToast('✅ 紀錄已自動儲存');
+      window.syncExpensesToCloud();
     };
 
     window.deleteRecord = (id) => {
@@ -754,10 +803,12 @@
          if (r.type === 'expense') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance += r.amount; } 
          else if (r.type === 'income') { const a = assets.find(x => x.id === r.assetId); if (a && a.type !== 'stock') a.balance -= r.amount; } 
          else if (r.type === 'transfer') { const aF = assets.find(x => x.id === r.assetFrom); const aT = assets.find(x => x.id === r.assetTo); if (aF && aF.type !== 'stock') aF.balance += r.amount; if (aT && aT.type !== 'stock') aT.balance -= r.amount; }
-         localStorage.setItem('my_assets', JSON.stringify(assets)); window.syncAssetsToCloud();
+         localStorage.setItem('my_assets', JSON.stringify(assets));
+         window.syncAssetsToCloud();
       }
-      records = records.filter(x => x.id !== String(id)); localStorage.setItem('my_expenses', JSON.stringify(records)); window.syncExpensesToCloud();
+      records = records.filter(x => x.id !== String(id)); localStorage.setItem('my_expenses', JSON.stringify(records));
       window.initDateFilters(); window.updateStatsView(); window.renderAssetSelects(); window.showToast('已刪除紀錄');
+      window.syncExpensesToCloud();
     };
 
     // ==========================================
@@ -900,27 +951,32 @@
     // ==========================================
     window.handleAssetTypeChange = () => {
         const type = document.getElementById('asset-type-input').value;
-        const stdFields = document.getElementById('standard-asset-fields');
+        const balanceWrapper = document.getElementById('asset-balance-wrapper');
         const stockFields = document.getElementById('stock-asset-fields');
         if (type === 'stock') {
-            stdFields.classList.add('hidden');
+            balanceWrapper.classList.add('hidden');
             stockFields.classList.remove('hidden');
+            document.getElementById('asset-name-input').placeholder = "例如：台新證券、元大證券...";
         } else {
-            stdFields.classList.remove('hidden');
+            balanceWrapper.classList.remove('hidden');
             stockFields.classList.add('hidden');
+            document.getElementById('asset-name-input').placeholder = "例如：台新銀行、我的錢包...";
         }
     };
     
-    // 動態新增庫存明細的列
-    window.addStockLot = (shares = '', cost = '') => {
+    // 動態新增庫存明細的列 (加入股票代號)
+    window.addStockLot = (stockId = '', shares = '', cost = '') => {
         const container = document.getElementById('stock-lots-container');
         const row = document.createElement('div');
         row.className = 'flex space-x-2 items-center stock-lot-row';
         row.innerHTML = `
-            <div class="flex-1">
+            <div class="w-20 shrink-0">
+                <input type="text" placeholder="代號" value="${stockId}" class="lot-stock-id w-full box-border p-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-blue-500 uppercase">
+            </div>
+            <div class="flex-1 min-w-0">
                 <input type="number" inputmode="numeric" placeholder="股數" value="${shares}" class="lot-shares w-full box-border p-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-blue-500">
             </div>
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
                 <input type="number" inputmode="numeric" placeholder="總成本($)" value="${cost}" class="lot-cost w-full box-border p-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-blue-500">
             </div>
             <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-600 p-2 shrink-0 transition-colors"><i class="fas fa-times"></i></button>
@@ -937,20 +993,18 @@
            document.getElementById('asset-modal-title').innerText = '編輯資產'; 
            document.getElementById('asset-id-input').value = a.id; 
            document.getElementById('asset-type-input').value = a.type;
+           document.getElementById('asset-name-input').value = a.name; 
            
            if (a.type === 'stock') {
-               document.getElementById('asset-stock-id-input').value = a.stockId || '';
                const container = document.getElementById('stock-lots-container');
                container.innerHTML = '';
-               // 讀取新的多筆庫存設計 (相容舊有單筆資料)
-               const lots = a.lots || (a.shares ? [{ shares: a.shares, cost: a.cost }] : []);
+               const lots = a.lots || (a.stockId ? [{ stockId: a.stockId, shares: a.shares, cost: a.cost }] : []);
                if (lots.length === 0) {
                    window.addStockLot();
                } else {
-                   lots.forEach(l => window.addStockLot(l.shares, l.cost));
+                   lots.forEach(l => window.addStockLot(l.stockId, l.shares, l.cost));
                }
            } else {
-               document.getElementById('asset-name-input').value = a.name; 
                document.getElementById('asset-balance-input').value = a.balance; 
            }
            document.getElementById('asset-delete-btn').classList.remove('hidden');
@@ -960,9 +1014,8 @@
            document.getElementById('asset-type-input').value = 'cash'; 
            document.getElementById('asset-name-input').value = ''; 
            document.getElementById('asset-balance-input').value = ''; 
-           document.getElementById('asset-stock-id-input').value = '';
            document.getElementById('stock-lots-container').innerHTML = '';
-           window.addStockLot(); // 預設新增一筆空白的
+           window.addStockLot(); 
            document.getElementById('asset-delete-btn').classList.add('hidden');
         }
         window.handleAssetTypeChange();
@@ -976,42 +1029,35 @@
         
         let name = document.getElementById('asset-name-input').value.trim();
         let balance = Number(document.getElementById('asset-balance-input').value) || 0;
-        let stockId = '', shares = 0, cost = 0;
         let lots = [];
 
         if (type === 'stock') {
-            stockId = document.getElementById('asset-stock-id-input').value.trim().toUpperCase();
-            if(!stockId) return window.showToast('請輸入股票代號');
-
             const rows = document.querySelectorAll('.stock-lot-row');
-            let totalShares = 0;
             let totalCost = 0;
 
             rows.forEach(row => {
+                const sid = row.querySelector('.lot-stock-id').value.trim().toUpperCase();
                 const s = Number(row.querySelector('.lot-shares').value) || 0;
                 const c = Number(row.querySelector('.lot-cost').value) || 0;
-                if (s > 0) {
-                    lots.push({ id: Date.now().toString() + Math.random(), shares: s, cost: c });
-                    totalShares += s;
+                if (sid && s > 0) {
+                    lots.push({ id: Date.now().toString() + Math.random(), stockId: sid, shares: s, cost: c });
                     totalCost += c;
                 }
             });
 
-            if(lots.length === 0) return window.showToast('請至少輸入一筆有效的庫存紀錄');
+            if(!name) return window.showToast('請輸入證券戶名稱 (如：台新證券)');
+            if(lots.length === 0) return window.showToast('請至少輸入一筆有效的庫存紀錄 (需填寫代號與股數)');
             
-            name = `${stockId} 股票`;
-            shares = totalShares;
-            cost = totalCost;
-            balance = cost; // 初始總成本做為暫定 balance
+            balance = totalCost;
         } else {
             if(!name) return window.showToast('請輸入資產名稱');
         }
 
         if(id) { 
             const idx = assets.findIndex(x => x.id === id); 
-            if(idx !== -1) assets[idx] = { ...assets[idx], name, type, balance, stockId, shares, cost, lots }; 
+            if(idx !== -1) assets[idx] = { ...assets[idx], name, type, balance, lots }; 
         } else { 
-            assets.push({ id: 'asset_' + Date.now(), name, type, balance, stockId, shares, cost, lots }); 
+            assets.push({ id: 'asset_' + Date.now(), name, type, balance, lots }); 
         }
 
         localStorage.setItem('my_assets', JSON.stringify(assets)); 
@@ -1028,21 +1074,22 @@
         assets = assets.filter(x => x.id !== id); localStorage.setItem('my_assets', JSON.stringify(assets)); window.renderAssetsView(); window.renderAssetSelects(); window.closeAssetModal(); window.showToast('已刪除資產'); window.syncAssetsToCloud();
     };
 
-    const AVAILABLE_ICONS = ['fas fa-utensils', 'fas fa-tshirt', 'fas fa-home', 'fas fa-car', 'fas fa-book', 'fas fa-gamepad', 'fas fa-shopping-cart', 'fas fa-heart', 'fas fa-gift', 'fas fa-plane', 'fas fa-pills', 'fas fa-paw', 'fas fa-baby', 'fas fa-music', 'fas fa-laptop', 'fas fa-coffee', 'fas fa-camera', 'fas fa-dumbbell', 'fas fa-ellipsis-h', 'fas fa-hand-holding-usd', 'fas fa-coins'];
-    const AVAILABLE_COLORS = ['#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6', '#10B981', '#EF4444', '#6B7280', '#14B8A6', '#F43F5E', '#84CC16', '#FF8C00', '#2E8B57'];
-    let selectedIconForCat = AVAILABLE_ICONS[0], selectedColorForCat = AVAILABLE_COLORS[0];
-
     window.openCategoryModal = (catId = null) => {
         const modal = document.getElementById('category-modal'), inner = modal.querySelector('div');
         modal.classList.remove('opacity-0', 'pointer-events-none'); inner.classList.remove('translate-y-full'); inner.classList.add('translate-y-0');
         if (catId) {
             const cat = categories.find(c => c.id === catId); document.getElementById('cat-modal-title').innerText = '編輯分類'; document.getElementById('cat-id-input').value = cat.id; document.getElementById('cat-type-input').value = cat.type; document.getElementById('cat-name-input').value = cat.name; document.getElementById('cat-keywords-input').value = (cat.keywords||[]).join(', '); selectedIconForCat = cat.icon; selectedColorForCat = cat.color; document.getElementById('cat-delete-btn').classList.toggle('hidden', cat.id === 'other');
         } else {
-            document.getElementById('cat-modal-title').innerText = '新增分類'; document.getElementById('cat-id-input').value = ''; document.getElementById('cat-type-input').value = 'expense'; document.getElementById('cat-name-input').value = ''; document.getElementById('cat-keywords-input').value = ''; selectedIconForCat = AVAILABLE_ICONS[0]; selectedColorForCat = AVAILABLE_COLORS[0]; document.getElementById('cat-delete-btn').classList.add('hidden');
+            document.getElementById('cat-modal-title').innerText = '新增分類'; document.getElementById('cat-id-input').value = ''; document.getElementById('cat-type-input').value = 'expense'; document.getElementById('cat-name-input').value = ''; document.getElementById('cat-keywords-input').value = ''; selectedIconForCat = 'fas fa-utensils'; selectedColorForCat = '#F59E0B'; document.getElementById('cat-delete-btn').classList.add('hidden');
         }
         window.renderCatModalPickers();
     };
     window.closeCategoryModal = () => { const modal = document.getElementById('category-modal'); modal.querySelector('div').classList.add('translate-y-full'); setTimeout(() => { modal.classList.add('opacity-0', 'pointer-events-none'); }, 300); };
+    
+    const AVAILABLE_ICONS = ['fas fa-utensils', 'fas fa-tshirt', 'fas fa-home', 'fas fa-car', 'fas fa-book', 'fas fa-gamepad', 'fas fa-shopping-cart', 'fas fa-heart', 'fas fa-gift', 'fas fa-plane', 'fas fa-pills', 'fas fa-paw', 'fas fa-baby', 'fas fa-music', 'fas fa-laptop', 'fas fa-coffee', 'fas fa-camera', 'fas fa-dumbbell', 'fas fa-ellipsis-h', 'fas fa-hand-holding-usd', 'fas fa-coins'];
+    const AVAILABLE_COLORS = ['#F59E0B', '#EC4899', '#8B5CF6', '#3B82F6', '#10B981', '#EF4444', '#6B7280', '#14B8A6', '#F43F5E', '#84CC16', '#FF8C00', '#2E8B57'];
+    let selectedIconForCat = AVAILABLE_ICONS[0], selectedColorForCat = AVAILABLE_COLORS[0];
+
     window.renderCatModalPickers = () => { document.getElementById('cat-icon-picker').innerHTML = AVAILABLE_ICONS.map(i => `<button onclick="window.selectModalIcon('${i}')" class="w-10 h-10 rounded-full border-2 ${selectedIconForCat===i ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-transparent bg-gray-100 text-gray-500'}"><i class="${i}"></i></button>`).join(''); document.getElementById('cat-color-picker').innerHTML = AVAILABLE_COLORS.map(c => `<button onclick="window.selectModalColor('${c}')" class="w-8 h-8 rounded-full border-2 ${selectedColorForCat===c ? 'border-gray-800 scale-110' : 'border-transparent'}" style="background-color: ${c}">${selectedColorForCat===c ? '<i class="fas fa-check text-white text-xs"></i>' : ''}</button>`).join(''); };
     window.selectModalIcon = (icon) => { selectedIconForCat = icon; window.renderCatModalPickers(); }; window.selectModalColor = (color) => { selectedColorForCat = color; window.renderCatModalPickers(); };
     window.saveCategory = () => {
