@@ -177,33 +177,34 @@
 
           <div id="category-section" class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 mb-3 shrink-0 w-full overflow-hidden">
             <label class="block text-xs font-medium text-gray-700 mb-2">選擇分類</label>
-            <!-- 限制高度為一行(76px)，改回網格排列並支援上下滑動 -->
-            <div id="category-container" class="grid grid-cols-4 gap-2 overflow-y-auto no-scrollbar w-full max-h-[76px] content-start"></div>
+            <!-- 限制高度為兩行(約164px)，改回網格排列並支援上下滑動 -->
+            <div id="category-container" class="grid grid-cols-4 gap-2 overflow-y-auto no-scrollbar w-full max-h-[164px] content-start"></div>
           </div>
           
           <div class="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-4 shrink-0 w-full">
-            <!-- 調整：日期與帳戶並排，解決日期太寬的問題 -->
-            <div class="flex space-x-3 w-full">
-              <div id="date-section" class="w-1/2">
+            <!-- 調整：使用 grid 強制平分寬度，防止日期與資產帳戶跑版 -->
+            <div class="grid grid-cols-2 gap-3 w-full">
+              <div id="date-section" class="w-full min-w-0">
                 <label class="block text-xs font-medium text-gray-700 mb-1">日期</label>
-                <input type="date" id="input-date" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block relative z-10">
+                <input type="date" id="input-date" class="w-full min-w-0 box-border px-2 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block relative z-10">
               </div>
-              <div id="asset-single-section" class="w-1/2">
+              <div id="asset-single-section" class="w-full min-w-0">
                 <label class="block text-xs font-medium text-gray-700 mb-1">資產帳戶</label>
-                <select id="input-asset" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block"></select>
+                <select id="input-asset" class="w-full min-w-0 box-border px-2 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block truncate"></select>
               </div>
             </div>
             
-            <div id="asset-transfer-section" class="w-full hidden space-y-3">
-              <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">移出資產 (扣除)</label>
-                <select id="input-asset-from" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block"></select>
+            <div id="asset-transfer-section" class="w-full hidden grid grid-cols-2 gap-3">
+              <div class="w-full min-w-0">
+                <label class="block text-xs font-medium text-gray-700 mb-1">移出 (扣除)</label>
+                <select id="input-asset-from" class="w-full min-w-0 box-border px-2 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block truncate"></select>
               </div>
-              <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">轉入資產 (增加)</label>
-                <select id="input-asset-to" class="w-full box-border px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block"></select>
+              <div class="w-full min-w-0">
+                <label class="block text-xs font-medium text-gray-700 mb-1">轉入 (增加)</label>
+                <select id="input-asset-to" class="w-full min-w-0 box-border px-2 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500 focus:bg-white transition-colors block truncate"></select>
               </div>
             </div>
+
             <div class="w-full">
               <label class="block text-xs font-medium text-gray-700 mb-1">金額</label>
               <div class="relative">
