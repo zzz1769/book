@@ -394,7 +394,7 @@
     let isFetchingStock = false;
 
     // ==========================================
-    // 📈 獲取台股上市/上櫃開源 API (搭配多重 CORS Proxy 備援)
+    // 📈 獲取台股上市/上櫃開源 API (使用自建 GAS Proxy)
     // ==========================================
     window.fetchStockData = async (force = false) => {
         if ((twseData && !force) || isFetchingStock) return;
@@ -403,26 +403,17 @@
         try {
             if(!twseData) twseData = {};
             
-            // 建立多個 Proxy 作為備援，避免單一 Proxy 被證交所阻擋 (522 錯誤)
-            const proxies = [
-                'https://corsproxy.io/?',
-                'https://api.codetabs.com/v1/proxy?quest=',
-                'https://api.allorigins.win/raw?url='
-            ];
+            // 使用您最新發布的 Google Apps Script Proxy
+            const gasProxyUrl = 'https://script.google.com/macros/s/AKfycbzrezSFpSGFv7utRHHFEgmLeDXjNfzoiUR0dbl3ykkbNZv-YlKUBKF9z6mwFO9Xw8zN/exec?url=';
 
-            const fetchWithFallback = async (targetUrl) => {
-                for (let proxy of proxies) {
-                    try {
-                        const res = await fetch(proxy + encodeURIComponent(targetUrl));
-                        if (res.ok) return await res.json();
-                    } catch (e) {
-                        console.warn(`Proxy ${proxy} failed.`);
-                    }
-                }
-                throw new Error('All proxies failed');
+            const fetchWithGAS = async (targetUrl) => {
+                const res = await fetch(gasProxyUrl + encodeURIComponent(targetUrl));
+                if (!res.ok) throw new Error('GAS Proxy failed');
+                return await res.json();
             };
 
-            const dataTwse = await fetchWithFallback('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
+            // 1. 取得上市股票行情
+            const dataTwse = await fetchWithGAS('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
             if (dataTwse && Array.isArray(dataTwse)) {
                 dataTwse.forEach(item => { 
                     let priceStr = String(item.ClosingPrice).replace(/,/g, '');
@@ -430,7 +421,8 @@
                 });
             }
 
-            const dataTpex = await fetchWithFallback('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes');
+            // 2. 取得上櫃股票行情
+            const dataTpex = await fetchWithGAS('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes');
             if (dataTpex && Array.isArray(dataTpex)) {
                 dataTpex.forEach(item => { 
                     let priceStr = String(item.Close).replace(/,/g, '');
@@ -445,7 +437,7 @@
             }
         } catch (e) {
             console.error('Fetch Stock API Error:', e);
-            if(force) window.showToast('❌ 股市更新失敗，請稍後再試');
+            if(force) window.showToast('❌ 股市更新失敗，請檢查 GAS 部署');
         }
         isFetchingStock = false;
     };
