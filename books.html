@@ -1338,12 +1338,117 @@
     window.clearAllData = () => { if(confirm('警告：確定刪除所有資料？')) { records = []; assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; localStorage.removeItem('my_expenses'); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('已清空'); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } };
 
     // Google Drive 備份支援(作為輔助)
-    window.initGoogleClient = () => { if(typeof google!=='undefined'&&google.accounts) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file', callback: async (t) => { if(t?.access_token) { localStorage.setItem('gdrive_token', t.access_token); window.showToast('✅ Drive 連線成功！'); } } }); };
-    
+    let drivePendingAction = null;
+    window.initGoogleClient = () => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: async (t) => {
+            if (t?.access_token) {
+              localStorage.setItem('gdrive_token', t.access_token);
+              window.showToast('✅ Drive 連線成功！');
+              const action = drivePendingAction;
+              drivePendingAction = null;
+              if (action === 'upload') await window.uploadDataToDrive(t.access_token);
+              if (action === 'download') await window.downloadDataFromDrive(t.access_token);
+            } else {
+              window.showToast('❌ 無法取得 Drive 權杖', true);
+            }
+          }
+        });
+      }
+    };
+
     const checkGoogleClient = setInterval(() => { if (typeof google !== 'undefined' && google.accounts) { clearInterval(checkGoogleClient); window.initGoogleClient(); } }, 200);
-    
-    window.syncFromDriveManual = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入', true); };
-    window.executeDriveUpload = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入', true); };
+
+    window.requestDriveAccess = (action) => {
+      if (!tokenClient) return window.showToast('Drive 未載入', true);
+      drivePendingAction = action;
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    };
+
+    window.syncFromDriveManual = () => window.requestDriveAccess('download');
+    window.executeDriveUpload = () => window.requestDriveAccess('upload');
+
+    window.findDriveBackupFile = async (accessToken) => {
+      const query = encodeURIComponent("name = 'expense_backup.json' and trashed = false");
+      const url = `https://www.googleapis.com/drive/v3/files?q=${query}&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!res.ok) throw new Error(`Drive list failed ${res.status}`);
+      const json = await res.json();
+      return json.files?.[0] || null;
+    };
+
+    window.uploadDataToDrive = async (accessToken) => {
+      try {
+        if (records.length === 0 && assets.length === 0) return window.showToast('無資料可備份', true);
+        const payload = JSON.stringify({ version: 2, records, categories, assets, updatedAt: new Date().toISOString() });
+        const metadata = { name: 'expense_backup.json', mimeType: 'application/json' };
+        const boundary = '-------314159265358979323846';
+        const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${payload}\r\n--${boundary}--`;
+        const file = await window.findDriveBackupFile(accessToken);
+        const method = file ? 'PATCH' : 'POST';
+        const uploadUrl = file
+          ? `https://www.googleapis.com/upload/drive/v3/files/${file.id}?uploadType=multipart&fields=id,name,modifiedTime`
+          : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime';
+        const res = await fetch(uploadUrl, {
+          method,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`
+          },
+          body
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Drive upload failed ${res.status}: ${errText}`);
+        }
+        window.showToast('✅ 已備份到 Google Drive');
+      } catch (err) {
+        console.error(err);
+        window.showToast(`❌ Drive 備份失敗`, true);
+      }
+    };
+
+    window.downloadDataFromDrive = async (accessToken) => {
+      try {
+        const file = await window.findDriveBackupFile(accessToken);
+        if (!file) return window.showToast('⚠️ Drive 上找不到備份檔', true);
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Drive download failed ${res.status}: ${errText}`);
+        }
+        const imp = await res.json();
+        const importedRecords = Array.isArray(imp) ? window.sanitizeRecords(imp) : window.sanitizeRecords(imp.records || []);
+        const importedCategories = imp.categories || [];
+        const importedAssets = imp.assets || [];
+        const mergeById = (base, imported) => {
+          const map = new Map(base.map(item => [item.id, item]));
+          imported.forEach(item => { if (!map.has(item.id)) map.set(item.id, item); });
+          return Array.from(map.values());
+        };
+        records = mergeById(records, importedRecords);
+        categories = mergeById(categories, importedCategories);
+        assets = mergeById(assets, importedAssets);
+        records = window.sanitizeRecords(records);
+        localStorage.setItem('my_expenses', JSON.stringify(records));
+        localStorage.setItem('my_categories', JSON.stringify(categories));
+        localStorage.setItem('my_assets', JSON.stringify(assets));
+        window.initDateFilters();
+        window.renderAssetSelects();
+        window.showToast('✅ 已從 Drive 下載並合併');
+        window.syncExpensesToCloud();
+        window.syncCategoriesToCloud();
+        window.syncAssetsToCloud();
+      } catch (err) {
+        console.error(err);
+        window.showToast('❌ Drive 下載失敗', true);
+      }
+    };
 
     // ==========================================
     // 🚀 初始化執行
