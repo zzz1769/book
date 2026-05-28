@@ -1372,7 +1372,7 @@
     window.executeDriveUpload = () => window.requestDriveAccess('upload');
 
     window.findDriveBackupFile = async (accessToken) => {
-      const query = encodeURIComponent("name = 'expense_backup.json' and trashed = false");
+      const query = encodeURIComponent("name = '極簡記帳備份_AutoSync.json' and trashed = false");
       const url = `https://www.googleapis.com/drive/v3/files?q=${query}&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!res.ok) throw new Error(`Drive list failed ${res.status}`);
@@ -1384,7 +1384,7 @@
       try {
         if (records.length === 0 && assets.length === 0) return window.showToast('無資料可備份', true);
         const payload = JSON.stringify({ version: 2, records, categories, assets, updatedAt: new Date().toISOString() });
-        const metadata = { name: 'expense_backup.json', mimeType: 'application/json' };
+        const metadata = { name: '極簡記帳備份_AutoSync.json', mimeType: 'application/json' };
         const boundary = '-------314159265358979323846';
         const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${payload}\r\n--${boundary}--`;
         const file = await window.findDriveBackupFile(accessToken);
