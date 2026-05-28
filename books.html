@@ -484,49 +484,10 @@
             
         } catch (e) {
             console.error('Fetch Stock API Error:', e);
-            if(force && !background) window.showToast('❌ 股市更新失敗，請檢查網路');
+            if(force && !background) window.showToast('❌ 股市更新失敗，請檢查網路', true);
         }
         isFetchingStock = false;
     };
-
-    // ==========================================
-    // 🛠️ 資料強固與清洗機制
-    // ==========================================
-    window.sanitizeRecords = (arr) => {
-        if (!Array.isArray(arr)) return [];
-        return arr.map(r => {
-            let derivedType = r.type;
-            if (r.cat && r.cat !== 'transfer') {
-                const catObj = categories.find(c => c.id === r.cat);
-                if (catObj && catObj.type) {
-                    derivedType = catObj.type;
-                }
-            } else if (r.cat === 'transfer') {
-                derivedType = 'transfer';
-            }
-
-            return {
-                ...r,
-                id: String(r.id || Date.now()), 
-                date: String(r.date || new Date().toISOString().split('T')[0]), 
-                amount: Number(r.amount) || 0, 
-                note: String(r.note || ''),
-                type: derivedType || (r.cat === 'transfer' ? 'transfer' : 'expense'),
-                assetId: r.assetId || (r.type !== 'transfer' ? (assets[0]?.id || 'asset_cash') : undefined)
-            };
-        }).sort((a, b) => new Date(b.date) - new Date(a.date));
-    };
-
-    try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; if(!Array.isArray(categories) || categories.length === 0) categories = [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } 
-    categories.forEach(c => { if(!c.type) c.type = 'expense'; }); 
-    if(!categories.some(c => c.type === 'expense')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'expense'));
-    if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
-    
-    try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } 
-    if(!Array.isArray(assets) || assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
-    
-    try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } 
-    records = window.sanitizeRecords(records); 
 
     // ==========================================
     // 🔒 認證與登入邏輯 (Firebase)
@@ -592,6 +553,9 @@
             localStorage.setItem('my_expenses', JSON.stringify(records));
             window.initDateFilters(); if (currentTab === 'stats') window.updateStatsView();
         } else { window.syncExpensesToCloud(); }
+      }, (error) => {
+        console.error("Expenses Sync Error:", error);
+        window.showToast("❌ 雲端連線被拒絕，請檢查 Firebase 規則", true);
       });
       unsubscribeCatFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'settings', 'categories'), (docSnap) => {
         if (docSnap.exists() && docSnap.data().list && Array.isArray(docSnap.data().list) && docSnap.data().list.length > 0) {
@@ -601,23 +565,115 @@
             localStorage.setItem('my_categories', JSON.stringify(categories));
             window.renderCategories(); window.renderSettingsCategories(); if (currentTab === 'stats') window.updateStatsView();
         } else { window.syncCategoriesToCloud(); }
+      }, (error) => {
+        console.error("Categories Sync Error:", error);
       });
       unsubscribeAssetFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'sync', 'assets'), (docSnap) => {
         if (docSnap.exists() && docSnap.data().list && Array.isArray(docSnap.data().list) && docSnap.data().list.length > 0) {
             assets = docSnap.data().list; localStorage.setItem('my_assets', JSON.stringify(assets));
             window.renderAssetSelects(); if (currentTab === 'assets') window.renderAssetsView();
         } else { window.syncAssetsToCloud(); }
+      }, (error) => {
+        console.error("Assets Sync Error:", error);
       });
     }
 
-    window.syncCategoriesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'categories'), { list: categories }); } catch(e){} };
-    window.syncExpensesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), { list: records }); } catch(e){} };
-    window.syncAssetsToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'assets'), { list: assets }); } catch(e){} };
+    window.syncCategoriesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'categories'), { list: categories }); } catch(e){ console.error(e); window.showToast('❌ 分類同步失敗: ' + e.message, true); } };
+    
+    window.syncExpensesToCloud = async () => { 
+        if (currentUser) {
+            try { 
+                const dataStr = JSON.stringify(records);
+                if(dataStr.length > 900000) {
+                    window.showToast('⚠️ 警告：您的資料量已接近或超過 1MB 上限！', true);
+                }
+                await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), { list: records }); 
+                const statusEl = document.getElementById('firebase-status');
+                if(statusEl && statusEl.innerText.includes('失敗')) {
+                    statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
+                    statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all";
+                }
+            } catch(e) { 
+                console.error(e); 
+                window.showToast('❌ 同步失敗: ' + (e.message || '未知錯誤'), true); 
+                const statusEl = document.getElementById('firebase-status');
+                if(statusEl) {
+                    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span class="truncate max-w-[100px]">雲端已拒絕</span>';
+                    statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm transition-all";
+                }
+            } 
+        }
+    };
+
+    window.syncAssetsToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'assets'), { list: assets }); } catch(e){ console.error(e); window.showToast('❌ 資產同步失敗: ' + e.message, true); } };
+
+    // ==========================================
+    // 🛠️ 資料強固與清洗機制 (修復 undefined 錯誤)
+    // ==========================================
+    window.sanitizeRecords = (arr) => {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(r => {
+            let derivedType = r.type;
+            if (r.cat && r.cat !== 'transfer') {
+                const catObj = categories.find(c => c.id === r.cat);
+                if (catObj && catObj.type) {
+                    derivedType = catObj.type;
+                }
+            } else if (r.cat === 'transfer') {
+                derivedType = 'transfer';
+            }
+
+            const newRec = {
+                ...r,
+                id: String(r.id || Date.now()), 
+                date: String(r.date || new Date().toISOString().split('T')[0]), 
+                amount: Number(r.amount) || 0, 
+                note: String(r.note || ''),
+                type: derivedType || (r.cat === 'transfer' ? 'transfer' : 'expense')
+            };
+
+            // 如果不是移轉，且沒有資產帳戶，才給予預設值
+            if (newRec.type !== 'transfer' && !newRec.assetId) {
+                newRec.assetId = assets[0]?.id || 'asset_cash';
+            }
+
+            // 🌟 關鍵修復：移除所有 undefined 的欄位，避免 Firebase 報錯崩潰
+            Object.keys(newRec).forEach(key => {
+                if (newRec[key] === undefined) delete newRec[key];
+            });
+
+            return newRec;
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+    };
+
+    try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; if(!Array.isArray(categories) || categories.length === 0) categories = [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } 
+    categories.forEach(c => { if(!c.type) c.type = 'expense'; }); 
+    if(!categories.some(c => c.type === 'expense')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'expense'));
+    if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
+    
+    try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } 
+    if(!Array.isArray(assets) || assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
+    
+    try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } 
+    records = window.sanitizeRecords(records); 
+
+    // 初始化時，如果本地有資料，強制再洗一次並同步上傳 (修復卡住的問題)
+    if (records.length > 0) {
+        localStorage.setItem('my_expenses', JSON.stringify(records));
+        // 注意：這裡不主動觸發 syncExpensesToCloud，讓 Firebase listener 處理，避免無限迴圈
+    }
 
     // ==========================================
     // 💼 核心視圖邏輯
     // ==========================================
-    window.showToast = (msg) => { const toast = document.getElementById('toast'); document.getElementById('toast-msg').innerText = msg; toast.classList.remove('opacity-0'); setTimeout(() => toast.classList.add('opacity-0'), 2000); };
+    let toastTimeout = null;
+    window.showToast = (msg, isError = false) => { 
+      const toast = document.getElementById('toast'); 
+      toast.innerHTML = `<i class="fas ${isError ? 'fa-exclamation-circle text-red-400' : 'fa-check-circle text-green-400'} mr-2"></i><span id="toast-msg">${msg}</span>`;
+      toast.classList.remove('opacity-0'); 
+      if(toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => toast.classList.add('opacity-0'), isError ? 6000 : 2000); 
+    };
     
     window.switchTab = (tab) => {
       currentTab = tab;
@@ -876,7 +932,8 @@
          if(aT && aT.type !== 'stock') aT.balance += amount * (ASSET_TYPES[aT.type]?.sign || 1);
       }
       
-      records.push(record); records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      records.push(record); 
+      records = window.sanitizeRecords(records); // 新增時也強制過濾一次
       localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets));
       document.getElementById('input-amount').value = ''; document.getElementById('input-note').value = '';
       window.initDateFilters(); window.renderAssetSelects(); if(currentTab === 'assets') window.renderAssetsView(); 
@@ -906,7 +963,7 @@
       } else if (field === 'note') value = String(value).trim();
       
       r[field] = value; 
-      if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      records = window.sanitizeRecords(records); // 更新時也強制過濾一次
       
       localStorage.setItem('my_expenses', JSON.stringify(records)); 
       window.updateStatsView(); window.renderAssetSelects(); window.showToast('✅ 紀錄已自動儲存');
@@ -931,7 +988,9 @@
          localStorage.setItem('my_assets', JSON.stringify(assets));
          window.syncAssetsToCloud();
       }
-      records = records.filter(x => x.id !== String(id)); localStorage.setItem('my_expenses', JSON.stringify(records));
+      records = records.filter(x => x.id !== String(id)); 
+      records = window.sanitizeRecords(records); // 刪除時也強制過濾一次
+      localStorage.setItem('my_expenses', JSON.stringify(records));
       window.initDateFilters(); window.updateStatsView(); window.renderAssetSelects(); window.showToast('已刪除紀錄');
       window.syncExpensesToCloud();
     };
@@ -1029,7 +1088,7 @@
               catSelectHtml = `<div class="relative cursor-pointer"><select onchange="window.updateRecordField('${r.id}', 'cat', this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">${currentCatOptions}</select><span class="border-b border-transparent hover:border-blue-300 transition-colors">${cat.name}</span></div>`;
            }
            const isInvoice = String(r.id).startsWith('INV');
-           return `<div class="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative"><div class="flex items-center space-x-3 w-[65%]"><div class="relative shrink-0" title="更換分類">${catIconHtml}</div><div class="overflow-hidden flex-1"><div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${isInvoice ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div><div class="flex items-center text-[10px] text-gray-500 mt-0.5 space-x-1">${accountBadge}<input type="date" value="${r.date}" onchange="window.updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[76px] cursor-pointer text-[10px] transition-colors relative z-10 shrink-0" title="修改日期"><span>•</span><input type="text" value="${r.note}" placeholder="新增備註..." onchange="window.updateRecordField('${r.id}', 'note', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 flex-1 min-w-0 text-[10px] text-gray-500 transition-colors relative z-10" title="修改備註"></div></div></div><div class="flex items-center justify-end space-x-1 w-[35%]"><span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span><input type="number" value="${r.amount}" onchange="window.updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-12 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10" title="修改金額" inputmode="numeric"><button onclick="window.deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button></div></div>`;
+           return `<div class="bg-white p-3 rounded-xl shadow-sm border border-transparent hover:border-blue-100 transition-colors group relative"><div class="flex items-start justify-between space-x-3"><div class="flex items-center space-x-3 min-w-0"><div class="relative shrink-0" title="更換分類">${catIconHtml}</div><div class="min-w-0"><div class="font-bold text-gray-800 text-sm flex items-center relative">${catSelectHtml}${isInvoice ? '<span class="ml-2 text-[8px] bg-orange-100 text-orange-600 px-1 py-0.5 rounded shrink-0 pointer-events-none">雲端發票</span>' : ''}</div><div class="flex items-center text-sm text-gray-500 mt-1 space-x-1">${accountBadge}<input type="date" value="${r.date}" onchange="window.updateRecordField('${r.id}', 'date', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 outline-none p-0 m-0 w-[92px] cursor-pointer text-sm transition-colors relative z-10 shrink-0" title="修改日期"></div></div></div><div class="flex items-center justify-end space-x-1 shrink-0"><span class="font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} text-sm">${r.type==='income'?'+ $':'$'}</span><input type="number" value="${r.amount}" onchange="window.updateRecordField('${r.id}', 'amount', this.value)" class="bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 w-14 sm:w-16 text-right font-bold ${r.type==='income'?'text-green-600':'text-gray-800'} transition-colors relative z-10 text-sm" title="修改金額" inputmode="numeric"><button onclick="window.deleteRecord('${r.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors shrink-0 ml-1 relative z-20"><i class="fas fa-trash-alt"></i></button></div></div><div class="mt-3"><input type="text" value="${r.note}" placeholder="新增備註..." onchange="window.updateRecordField('${r.id}', 'note', this.value)" class="w-full bg-transparent border-b border-transparent hover:border-blue-300 focus:border-blue-500 outline-none p-0 m-0 text-sm text-gray-500 transition-colors relative z-10" title="修改備註"></div></div>`;
          }).join('');
       }
     };
@@ -1266,22 +1325,130 @@
                   records.push(rec); newC++; if(assets[0]) assets[0].balance -= d.amount;
               } else skipC++;
           });
-          if(newC > 0) { records.sort((a,b)=>new Date(b.date)-new Date(a.date)); localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); if(currentTab==='stats') window.updateStatsView(); window.showToast(`✅ 匯入 ${newC} 張新發票`); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } else window.showToast(`⚠️ 無新發票`);
-        } catch(err) { window.showToast('❌ 解析失敗'); } event.target.value = ''; 
+          if(newC > 0) { 
+              records = window.sanitizeRecords(records); // 匯入時也強制過濾
+              localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); if(currentTab==='stats') window.updateStatsView(); window.showToast(`✅ 匯入 ${newC} 張新發票`); window.syncExpensesToCloud(); window.syncAssetsToCloud(); 
+          } else window.showToast(`⚠️ 無新發票`);
+        } catch(err) { window.showToast('❌ 解析失敗', true); } event.target.value = ''; 
       }; reader.readAsText(file, 'UTF-8'); 
     };
 
     window.exportData = () => { if(records.length===0 && assets.length===0) return window.showToast('無資料可匯出'); const a = document.createElement('a'); a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ version: 2, records, categories, assets })); a.download = `expense_backup_${new Date().toISOString().split('T')[0]}.json`; a.click(); window.showToast('✅ 備份下載成功'); };
-    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = window.sanitizeRecords(imp); else { records = window.sanitizeRecords(imp.records||[]); if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('✅ 還原成功'); window.syncExpensesToCloud(); window.syncCategoriesToCloud(); window.syncAssetsToCloud(); } catch(err){ window.showToast('❌ 格式錯誤'); } e.target.value = ''; }; r.readAsText(f); };
+    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = window.sanitizeRecords(imp); else { records = window.sanitizeRecords(imp.records||[]); if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('✅ 還原成功'); window.syncExpensesToCloud(); window.syncCategoriesToCloud(); window.syncAssetsToCloud(); } catch(err){ window.showToast('❌ 格式錯誤', true); } e.target.value = ''; }; r.readAsText(f); };
     window.clearAllData = () => { if(confirm('警告：確定刪除所有資料？')) { records = []; assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; localStorage.removeItem('my_expenses'); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('已清空'); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } };
 
     // Google Drive 備份支援(作為輔助)
-    window.initGoogleClient = () => { if(typeof google!=='undefined'&&google.accounts) tokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: 'https://www.googleapis.com/auth/drive.file', callback: async (t) => { if(t?.access_token) { localStorage.setItem('gdrive_token', t.access_token); window.showToast('✅ Drive 連線成功！'); } } }); };
-    
+    let drivePendingAction = null;
+    window.initGoogleClient = () => {
+      if (typeof google !== 'undefined' && google.accounts) {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/drive.file',
+          callback: async (t) => {
+            if (t?.access_token) {
+              localStorage.setItem('gdrive_token', t.access_token);
+              window.showToast('✅ Drive 連線成功！');
+              const action = drivePendingAction;
+              drivePendingAction = null;
+              if (action === 'upload') await window.uploadDataToDrive(t.access_token);
+              if (action === 'download') await window.downloadDataFromDrive(t.access_token);
+            } else {
+              window.showToast('❌ 無法取得 Drive 權杖', true);
+            }
+          }
+        });
+      }
+    };
+
     const checkGoogleClient = setInterval(() => { if (typeof google !== 'undefined' && google.accounts) { clearInterval(checkGoogleClient); window.initGoogleClient(); } }, 200);
-    
-    window.syncFromDriveManual = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
-    window.executeDriveUpload = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
+
+    window.requestDriveAccess = (action) => {
+      if (!tokenClient) return window.showToast('Drive 未載入', true);
+      drivePendingAction = action;
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    };
+
+    window.syncFromDriveManual = () => window.requestDriveAccess('download');
+    window.executeDriveUpload = () => window.requestDriveAccess('upload');
+
+    window.findDriveBackupFile = async (accessToken) => {
+      const query = encodeURIComponent("name = '極簡記帳備份_AutoSync.json' and trashed = false");
+      const url = `https://www.googleapis.com/drive/v3/files?q=${query}&spaces=drive&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!res.ok) throw new Error(`Drive list failed ${res.status}`);
+      const json = await res.json();
+      return json.files?.[0] || null;
+    };
+
+    window.uploadDataToDrive = async (accessToken) => {
+      try {
+        if (records.length === 0 && assets.length === 0) return window.showToast('無資料可備份', true);
+        const payload = JSON.stringify({ version: 2, records, categories, assets, updatedAt: new Date().toISOString() });
+        const metadata = { name: '極簡記帳備份_AutoSync.json', mimeType: 'application/json' };
+        const boundary = '-------314159265358979323846';
+        const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${payload}\r\n--${boundary}--`;
+        const file = await window.findDriveBackupFile(accessToken);
+        const method = file ? 'PATCH' : 'POST';
+        const uploadUrl = file
+          ? `https://www.googleapis.com/upload/drive/v3/files/${file.id}?uploadType=multipart&fields=id,name,modifiedTime`
+          : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime';
+        const res = await fetch(uploadUrl, {
+          method,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`
+          },
+          body
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Drive upload failed ${res.status}: ${errText}`);
+        }
+        window.showToast('✅ 已備份到 Google Drive');
+      } catch (err) {
+        console.error(err);
+        window.showToast(`❌ Drive 備份失敗`, true);
+      }
+    };
+
+    window.downloadDataFromDrive = async (accessToken) => {
+      try {
+        const file = await window.findDriveBackupFile(accessToken);
+        if (!file) return window.showToast('⚠️ Drive 上找不到備份檔', true);
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Drive download failed ${res.status}: ${errText}`);
+        }
+        const imp = await res.json();
+        const importedRecords = Array.isArray(imp) ? window.sanitizeRecords(imp) : window.sanitizeRecords(imp.records || []);
+        const importedCategories = imp.categories || [];
+        const importedAssets = imp.assets || [];
+        const mergeById = (base, imported) => {
+          const map = new Map(base.map(item => [item.id, item]));
+          imported.forEach(item => { if (!map.has(item.id)) map.set(item.id, item); });
+          return Array.from(map.values());
+        };
+        records = mergeById(records, importedRecords);
+        categories = mergeById(categories, importedCategories);
+        assets = mergeById(assets, importedAssets);
+        records = window.sanitizeRecords(records);
+        localStorage.setItem('my_expenses', JSON.stringify(records));
+        localStorage.setItem('my_categories', JSON.stringify(categories));
+        localStorage.setItem('my_assets', JSON.stringify(assets));
+        window.initDateFilters();
+        window.renderAssetSelects();
+        window.showToast('✅ 已從 Drive 下載並合併');
+        window.syncExpensesToCloud();
+        window.syncCategoriesToCloud();
+        window.syncAssetsToCloud();
+      } catch (err) {
+        console.error(err);
+        window.showToast('❌ Drive 下載失敗', true);
+      }
+    };
 
     // ==========================================
     // 🚀 初始化執行
