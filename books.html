@@ -484,49 +484,10 @@
             
         } catch (e) {
             console.error('Fetch Stock API Error:', e);
-            if(force && !background) window.showToast('❌ 股市更新失敗，請檢查網路');
+            if(force && !background) window.showToast('❌ 股市更新失敗，請檢查網路', true);
         }
         isFetchingStock = false;
     };
-
-    // ==========================================
-    // 🛠️ 資料強固與清洗機制
-    // ==========================================
-    window.sanitizeRecords = (arr) => {
-        if (!Array.isArray(arr)) return [];
-        return arr.map(r => {
-            let derivedType = r.type;
-            if (r.cat && r.cat !== 'transfer') {
-                const catObj = categories.find(c => c.id === r.cat);
-                if (catObj && catObj.type) {
-                    derivedType = catObj.type;
-                }
-            } else if (r.cat === 'transfer') {
-                derivedType = 'transfer';
-            }
-
-            return {
-                ...r,
-                id: String(r.id || Date.now()), 
-                date: String(r.date || new Date().toISOString().split('T')[0]), 
-                amount: Number(r.amount) || 0, 
-                note: String(r.note || ''),
-                type: derivedType || (r.cat === 'transfer' ? 'transfer' : 'expense'),
-                assetId: r.assetId || (r.type !== 'transfer' ? (assets[0]?.id || 'asset_cash') : undefined)
-            };
-        }).sort((a, b) => new Date(b.date) - new Date(a.date));
-    };
-
-    try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; if(!Array.isArray(categories) || categories.length === 0) categories = [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } 
-    categories.forEach(c => { if(!c.type) c.type = 'expense'; }); 
-    if(!categories.some(c => c.type === 'expense')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'expense'));
-    if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
-    
-    try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } 
-    if(!Array.isArray(assets) || assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
-    
-    try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } 
-    records = window.sanitizeRecords(records); 
 
     // ==========================================
     // 🔒 認證與登入邏輯 (Firebase)
@@ -645,6 +606,62 @@
     };
 
     window.syncAssetsToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'assets'), { list: assets }); } catch(e){ console.error(e); window.showToast('❌ 資產同步失敗: ' + e.message, true); } };
+
+    // ==========================================
+    // 🛠️ 資料強固與清洗機制 (修復 undefined 錯誤)
+    // ==========================================
+    window.sanitizeRecords = (arr) => {
+        if (!Array.isArray(arr)) return [];
+        return arr.map(r => {
+            let derivedType = r.type;
+            if (r.cat && r.cat !== 'transfer') {
+                const catObj = categories.find(c => c.id === r.cat);
+                if (catObj && catObj.type) {
+                    derivedType = catObj.type;
+                }
+            } else if (r.cat === 'transfer') {
+                derivedType = 'transfer';
+            }
+
+            const newRec = {
+                ...r,
+                id: String(r.id || Date.now()), 
+                date: String(r.date || new Date().toISOString().split('T')[0]), 
+                amount: Number(r.amount) || 0, 
+                note: String(r.note || ''),
+                type: derivedType || (r.cat === 'transfer' ? 'transfer' : 'expense')
+            };
+
+            // 如果不是移轉，且沒有資產帳戶，才給予預設值
+            if (newRec.type !== 'transfer' && !newRec.assetId) {
+                newRec.assetId = assets[0]?.id || 'asset_cash';
+            }
+
+            // 🌟 關鍵修復：移除所有 undefined 的欄位，避免 Firebase 報錯崩潰
+            Object.keys(newRec).forEach(key => {
+                if (newRec[key] === undefined) delete newRec[key];
+            });
+
+            return newRec;
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+    };
+
+    try { const sc = localStorage.getItem('my_categories'); categories = sc ? JSON.parse(sc) : [...DEFAULT_CATEGORIES]; if(!Array.isArray(categories) || categories.length === 0) categories = [...DEFAULT_CATEGORIES]; } catch(e){ categories = [...DEFAULT_CATEGORIES]; } 
+    categories.forEach(c => { if(!c.type) c.type = 'expense'; }); 
+    if(!categories.some(c => c.type === 'expense')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'expense'));
+    if(!categories.some(c => c.type === 'income')) categories.push(...DEFAULT_CATEGORIES.filter(c => c.type === 'income'));
+    
+    try { const sa = localStorage.getItem('my_assets'); assets = sa ? JSON.parse(sa) : [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } catch(e){ assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; } 
+    if(!Array.isArray(assets) || assets.length === 0) assets.push({ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 });
+    
+    try { const sr = localStorage.getItem('my_expenses'); records = sr ? JSON.parse(sr) : []; } catch(e){ records = []; } 
+    records = window.sanitizeRecords(records); 
+
+    // 初始化時，如果本地有資料，強制再洗一次並同步上傳 (修復卡住的問題)
+    if (records.length > 0) {
+        localStorage.setItem('my_expenses', JSON.stringify(records));
+        // 注意：這裡不主動觸發 syncExpensesToCloud，讓 Firebase listener 處理，避免無限迴圈
+    }
 
     // ==========================================
     // 💼 核心視圖邏輯
@@ -915,7 +932,8 @@
          if(aT && aT.type !== 'stock') aT.balance += amount * (ASSET_TYPES[aT.type]?.sign || 1);
       }
       
-      records.push(record); records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      records.push(record); 
+      records = window.sanitizeRecords(records); // 新增時也強制過濾一次
       localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets));
       document.getElementById('input-amount').value = ''; document.getElementById('input-note').value = '';
       window.initDateFilters(); window.renderAssetSelects(); if(currentTab === 'assets') window.renderAssetsView(); 
@@ -945,7 +963,7 @@
       } else if (field === 'note') value = String(value).trim();
       
       r[field] = value; 
-      if (field === 'date') records.sort((a, b) => new Date(b.date) - new Date(a.date));
+      records = window.sanitizeRecords(records); // 更新時也強制過濾一次
       
       localStorage.setItem('my_expenses', JSON.stringify(records)); 
       window.updateStatsView(); window.renderAssetSelects(); window.showToast('✅ 紀錄已自動儲存');
@@ -970,7 +988,9 @@
          localStorage.setItem('my_assets', JSON.stringify(assets));
          window.syncAssetsToCloud();
       }
-      records = records.filter(x => x.id !== String(id)); localStorage.setItem('my_expenses', JSON.stringify(records));
+      records = records.filter(x => x.id !== String(id)); 
+      records = window.sanitizeRecords(records); // 刪除時也強制過濾一次
+      localStorage.setItem('my_expenses', JSON.stringify(records));
       window.initDateFilters(); window.updateStatsView(); window.renderAssetSelects(); window.showToast('已刪除紀錄');
       window.syncExpensesToCloud();
     };
@@ -1305,13 +1325,16 @@
                   records.push(rec); newC++; if(assets[0]) assets[0].balance -= d.amount;
               } else skipC++;
           });
-          if(newC > 0) { records.sort((a,b)=>new Date(b.date)-new Date(a.date)); localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); if(currentTab==='stats') window.updateStatsView(); window.showToast(`✅ 匯入 ${newC} 張新發票`); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } else window.showToast(`⚠️ 無新發票`);
-        } catch(err) { window.showToast('❌ 解析失敗'); } event.target.value = ''; 
+          if(newC > 0) { 
+              records = window.sanitizeRecords(records); // 匯入時也強制過濾
+              localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); if(currentTab==='stats') window.updateStatsView(); window.showToast(`✅ 匯入 ${newC} 張新發票`); window.syncExpensesToCloud(); window.syncAssetsToCloud(); 
+          } else window.showToast(`⚠️ 無新發票`);
+        } catch(err) { window.showToast('❌ 解析失敗', true); } event.target.value = ''; 
       }; reader.readAsText(file, 'UTF-8'); 
     };
 
     window.exportData = () => { if(records.length===0 && assets.length===0) return window.showToast('無資料可匯出'); const a = document.createElement('a'); a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify({ version: 2, records, categories, assets })); a.download = `expense_backup_${new Date().toISOString().split('T')[0]}.json`; a.click(); window.showToast('✅ 備份下載成功'); };
-    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = window.sanitizeRecords(imp); else { records = window.sanitizeRecords(imp.records||[]); if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('✅ 還原成功'); window.syncExpensesToCloud(); window.syncCategoriesToCloud(); window.syncAssetsToCloud(); } catch(err){ window.showToast('❌ 格式錯誤'); } e.target.value = ''; }; r.readAsText(f); };
+    window.importData = (e) => { const f = e.target.files[0]; if(!f) return; const r = new FileReader(); r.onload = (ev) => { try { const imp = JSON.parse(ev.target.result); if(Array.isArray(imp)) records = window.sanitizeRecords(imp); else { records = window.sanitizeRecords(imp.records||[]); if(imp.categories) categories = imp.categories; if(imp.assets) assets = imp.assets; } localStorage.setItem('my_expenses', JSON.stringify(records)); localStorage.setItem('my_categories', JSON.stringify(categories)); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('✅ 還原成功'); window.syncExpensesToCloud(); window.syncCategoriesToCloud(); window.syncAssetsToCloud(); } catch(err){ window.showToast('❌ 格式錯誤', true); } e.target.value = ''; }; r.readAsText(f); };
     window.clearAllData = () => { if(confirm('警告：確定刪除所有資料？')) { records = []; assets = [{ id: 'asset_cash', name: '現金', type: 'cash', balance: 0 }]; localStorage.removeItem('my_expenses'); localStorage.setItem('my_assets', JSON.stringify(assets)); window.initDateFilters(); window.renderAssetSelects(); window.showToast('已清空'); window.syncExpensesToCloud(); window.syncAssetsToCloud(); } };
 
     // Google Drive 備份支援(作為輔助)
@@ -1319,8 +1342,8 @@
     
     const checkGoogleClient = setInterval(() => { if (typeof google !== 'undefined' && google.accounts) { clearInterval(checkGoogleClient); window.initGoogleClient(); } }, 200);
     
-    window.syncFromDriveManual = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
-    window.executeDriveUpload = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入'); };
+    window.syncFromDriveManual = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入', true); };
+    window.executeDriveUpload = () => { if(tokenClient) tokenClient.requestAccessToken({ prompt: 'select_account' }); else window.showToast('Drive 未載入', true); };
 
     // ==========================================
     // 🚀 初始化執行
