@@ -592,6 +592,9 @@
             localStorage.setItem('my_expenses', JSON.stringify(records));
             window.initDateFilters(); if (currentTab === 'stats') window.updateStatsView();
         } else { window.syncExpensesToCloud(); }
+      }, (error) => {
+        console.error("Expenses Sync Error:", error);
+        window.showToast("❌ 雲端連線被拒絕，請檢查 Firebase 規則", true);
       });
       unsubscribeCatFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'settings', 'categories'), (docSnap) => {
         if (docSnap.exists() && docSnap.data().list && Array.isArray(docSnap.data().list) && docSnap.data().list.length > 0) {
@@ -601,23 +604,59 @@
             localStorage.setItem('my_categories', JSON.stringify(categories));
             window.renderCategories(); window.renderSettingsCategories(); if (currentTab === 'stats') window.updateStatsView();
         } else { window.syncCategoriesToCloud(); }
+      }, (error) => {
+        console.error("Categories Sync Error:", error);
       });
       unsubscribeAssetFirestore = onSnapshot(doc(db, 'users', currentUser.uid, 'sync', 'assets'), (docSnap) => {
         if (docSnap.exists() && docSnap.data().list && Array.isArray(docSnap.data().list) && docSnap.data().list.length > 0) {
             assets = docSnap.data().list; localStorage.setItem('my_assets', JSON.stringify(assets));
             window.renderAssetSelects(); if (currentTab === 'assets') window.renderAssetsView();
         } else { window.syncAssetsToCloud(); }
+      }, (error) => {
+        console.error("Assets Sync Error:", error);
       });
     }
 
-    window.syncCategoriesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'categories'), { list: categories }); } catch(e){} };
-    window.syncExpensesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), { list: records }); } catch(e){} };
-    window.syncAssetsToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'assets'), { list: assets }); } catch(e){} };
+    window.syncCategoriesToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'categories'), { list: categories }); } catch(e){ console.error(e); window.showToast('❌ 分類同步失敗: ' + e.message, true); } };
+    
+    window.syncExpensesToCloud = async () => { 
+        if (currentUser) {
+            try { 
+                const dataStr = JSON.stringify(records);
+                if(dataStr.length > 900000) {
+                    window.showToast('⚠️ 警告：您的資料量已接近或超過 1MB 上限！', true);
+                }
+                await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'expenses'), { list: records }); 
+                const statusEl = document.getElementById('firebase-status');
+                if(statusEl && statusEl.innerText.includes('失敗')) {
+                    statusEl.innerHTML = '<i class="fas fa-wifi"></i><span>已連線</span>';
+                    statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-600 border border-green-200 text-xs font-bold shadow-sm transition-all";
+                }
+            } catch(e) { 
+                console.error(e); 
+                window.showToast('❌ 同步失敗: ' + (e.message || '未知錯誤'), true); 
+                const statusEl = document.getElementById('firebase-status');
+                if(statusEl) {
+                    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span class="truncate max-w-[100px]">雲端已拒絕</span>';
+                    statusEl.className = "flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 border border-red-200 text-xs font-bold shadow-sm transition-all";
+                }
+            } 
+        }
+    };
+
+    window.syncAssetsToCloud = async () => { if (currentUser) try { await setDoc(doc(db, 'users', currentUser.uid, 'sync', 'assets'), { list: assets }); } catch(e){ console.error(e); window.showToast('❌ 資產同步失敗: ' + e.message, true); } };
 
     // ==========================================
     // 💼 核心視圖邏輯
     // ==========================================
-    window.showToast = (msg) => { const toast = document.getElementById('toast'); document.getElementById('toast-msg').innerText = msg; toast.classList.remove('opacity-0'); setTimeout(() => toast.classList.add('opacity-0'), 2000); };
+    let toastTimeout = null;
+    window.showToast = (msg, isError = false) => { 
+      const toast = document.getElementById('toast'); 
+      toast.innerHTML = `<i class="fas ${isError ? 'fa-exclamation-circle text-red-400' : 'fa-check-circle text-green-400'} mr-2"></i><span id="toast-msg">${msg}</span>`;
+      toast.classList.remove('opacity-0'); 
+      if(toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => toast.classList.add('opacity-0'), isError ? 6000 : 2000); 
+    };
     
     window.switchTab = (tab) => {
       currentTab = tab;
