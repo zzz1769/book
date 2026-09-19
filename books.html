@@ -286,9 +286,11 @@
             <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
           </select>
         </div>
-        <div class="flex bg-gray-200 p-1 rounded-lg">
-           <button id="stats-type-expense" onclick="window.setStatsType('expense')" class="flex-1 py-1 text-xs font-bold bg-white shadow-sm rounded text-gray-800 transition-colors">支出分析</button>
-           <button id="stats-type-income" onclick="window.setStatsType('income')" class="flex-1 py-1 text-xs font-bold text-gray-500 rounded transition-colors">收入分析</button>
+        <div class="flex bg-gray-200 p-1 rounded-lg space-x-1">
+           <button id="stats-type-expense" onclick="window.setStatsType('expense')" class="flex-1 py-1.5 px-1 text-[11px] sm:text-xs font-bold bg-white shadow-sm rounded-md text-gray-800 transition-colors">支出分析</button>
+           <button id="stats-type-income" onclick="window.setStatsType('income')" class="flex-1 py-1.5 px-1 text-[11px] sm:text-xs font-bold text-gray-500 hover:bg-white/50 rounded-md transition-colors">收入分析</button>
+           <button id="stats-type-stock_buy" onclick="window.setStatsType('stock_buy')" class="flex-1 py-1.5 px-1 text-[11px] sm:text-xs font-bold text-gray-500 hover:bg-white/50 rounded-md transition-colors">買入股票</button>
+           <button id="stats-type-stock_sell" onclick="window.setStatsType('stock_sell')" class="flex-1 py-1.5 px-1 text-[11px] sm:text-xs font-bold text-gray-500 hover:bg-white/50 rounded-md transition-colors">賣出股票</button>
         </div>
         <div class="flex space-x-2">
           <div class="relative flex-1">
@@ -1135,7 +1137,17 @@
       window.syncExpensesToCloud();
     };
 
-    window.setStatsType = (type) => { window.currentStatsType = type; currentStatsType = type; document.getElementById('stats-type-expense').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'expense' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; document.getElementById('stats-type-income').className = `flex-1 py-1 text-xs font-bold rounded transition-colors ${type === 'income' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500'}`; window.updateStatsView(); };
+    window.setStatsType = (type) => { 
+        window.currentStatsType = type; 
+        currentStatsType = type; 
+        ['expense', 'income', 'stock_buy', 'stock_sell'].forEach(t => {
+            const btn = document.getElementById(`stats-type-${t}`);
+            if (btn) {
+                btn.className = `flex-1 py-1.5 text-[11px] sm:text-xs font-bold rounded-md transition-colors ${type === t ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:bg-white/50'}`;
+            }
+        });
+        window.clearCategoryFilter();
+    };
 
     window.initDateFilters = (isFirstLoad = false) => {
       const yearSelect = document.getElementById('filter-year'), monthSelect = document.getElementById('filter-month');
@@ -1159,23 +1171,48 @@
           if (selectedMonth !== 'all') { filteredRecords = filteredRecords.filter(r => r.date.startsWith(`${selectedYear}-${selectedMonth}`)); titleText = `${selectedYear}年 ${parseInt(selectedMonth)}月`; } 
           else { filteredRecords = filteredRecords.filter(r => r.date.startsWith(selectedYear)); titleText = `${selectedYear}年`; }
       }
-      titleText += currentStatsType === 'expense' ? ' 總支出' : ' 總收入';
+      
+      if (currentStatsType === 'expense') titleText += ' 總支出';
+      else if (currentStatsType === 'income') titleText += ' 總收入';
+      else if (currentStatsType === 'stock_buy') titleText += ' 買股總額';
+      else if (currentStatsType === 'stock_sell') titleText += ' 賣出總額';
 
       if (currentSearchQuery) {
           filteredRecords = filteredRecords.filter(r => {
              const catName = categories.find(c => c.id === r.cat)?.name || '';
-             return (r.note && r.note.toLowerCase().includes(currentSearchQuery)) || catName.includes(currentSearchQuery);
+             const stockMatch = (r.stockId || '').toLowerCase().includes(currentSearchQuery);
+             return (r.note && r.note.toLowerCase().includes(currentSearchQuery)) || catName.includes(currentSearchQuery) || stockMatch;
           });
       }
       document.getElementById('stats-title-text').innerText = titleText;
       
-      let chartRecords = filteredRecords.filter(r => r.type === currentStatsType), total = 0, totalsByCat = {};
+      let chartRecords = filteredRecords.filter(r => r.type === currentStatsType);
+      let total = 0, totalsByCat = {}, plByCat = {}, totalPL = 0;
+      
       chartRecords.forEach(r => { 
-        let cId = categories.find(c => c.id === r.cat) ? r.cat : 'unknown';
-        total += r.amount; 
-        totalsByCat[cId] = (totalsByCat[cId] || 0) + r.amount; 
+        if (currentStatsType === 'stock_buy' || currentStatsType === 'stock_sell') {
+            let sId = r.stockId || '未知股票';
+            total += r.amount;
+            totalsByCat[sId] = (totalsByCat[sId] || 0) + r.amount;
+            if (currentStatsType === 'stock_sell') {
+                let pl = r.amount - (r.cost_deducted || r.amount); // 實收 - 扣除平均成本 = 損益
+                plByCat[sId] = (plByCat[sId] || 0) + pl;
+                totalPL += pl;
+            }
+        } else {
+            let cId = categories.find(c => c.id === r.cat) ? r.cat : 'unknown';
+            total += r.amount; 
+            totalsByCat[cId] = (totalsByCat[cId] || 0) + r.amount; 
+        }
       });
-      document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
+      
+      if (currentStatsType === 'stock_sell') {
+          const plColor = totalPL >= 0 ? 'text-red-300' : 'text-green-300';
+          const plSign = totalPL > 0 ? '+' : '';
+          document.getElementById('total-expense').innerHTML = `$${total.toLocaleString()} <div class="text-sm ${plColor} font-normal mt-1 opacity-90"><i class="fas fa-coins mr-1"></i>已實現損益: ${plSign}$${Math.round(totalPL).toLocaleString()}</div>`;
+      } else {
+          document.getElementById('total-expense').innerText = `$${total.toLocaleString()}`;
+      }
       
       const canvas = document.getElementById('pieChart'), ctx = canvas.getContext('2d'), cx = canvas.width/2, cy = canvas.height/2, radius = Math.min(cx, cy);
       ctx.clearRect(0, 0, canvas.width, canvas.height); pieChartSlices = [];
@@ -1184,26 +1221,57 @@
         document.getElementById('stats-breakdown').innerHTML = '<div class="text-center text-gray-400 py-4 text-sm">無資料</div>';
       } else {
         let startAngle = -0.5 * Math.PI, breakdownArr = [];
-        Object.keys(totalsByCat).forEach(catId => {
-          const cat = categories.find(c => c.id === catId) || { id: 'unknown', name: '未知分類', color: '#9CA3AF', icon: 'fas fa-question', type: currentStatsType };
-          const amount = totalsByCat[catId], sliceAngle = (amount / total) * 2 * Math.PI, endAngle = startAngle + sliceAngle;
+        const colorPalette = ['#F59E0B', '#3B82F6', '#10B981', '#EC4899', '#8B5CF6', '#EF4444', '#14B8A6', '#F43F5E'];
+        let colorIdx = 0;
+        
+        Object.keys(totalsByCat).forEach(key => {
+          let cat;
+          if (currentStatsType === 'stock_buy' || currentStatsType === 'stock_sell') {
+              cat = { id: key, name: key, color: colorPalette[colorIdx % colorPalette.length], icon: 'fas fa-chart-line', type: currentStatsType };
+              colorIdx++;
+          } else {
+              cat = categories.find(c => c.id === key) || { id: 'unknown', name: '未知分類', color: '#9CA3AF', icon: 'fas fa-question', type: currentStatsType };
+          }
+          
+          const amount = totalsByCat[key], sliceAngle = (amount / total) * 2 * Math.PI, endAngle = startAngle + sliceAngle;
           ctx.fillStyle = cat.color; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, radius, startAngle, endAngle); ctx.closePath(); ctx.fill(); 
-          pieChartSlices.push({ id: catId, startAngle, endAngle }); startAngle = endAngle;
-          breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1) });
+          pieChartSlices.push({ id: key, startAngle, endAngle }); startAngle = endAngle;
+          
+          let extraInfo = '';
+          if (currentStatsType === 'stock_sell') {
+              let pl = plByCat[key] || 0;
+              let plColor = pl > 0 ? 'text-red-500' : (pl < 0 ? 'text-green-500' : 'text-gray-500');
+              let plSign = pl > 0 ? '+' : '';
+              extraInfo = `<div class="text-[10px] ${plColor} font-bold mt-0.5">損益 ${plSign}$${Math.round(pl).toLocaleString()}</div>`;
+          }
+          
+          breakdownArr.push({ ...cat, amount, percent: ((amount / total) * 100).toFixed(1), extraInfo });
         });
         ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, radius * 0.6, 0, Math.PI * 2); ctx.fill();
         breakdownArr.sort((a,b) => b.amount - a.amount);
-        document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `<div onclick="window.filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}"><div class="flex items-center"><div class="w-3 h-3 rounded-full mr-2" style="background-color: ${item.color}"></div><span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span></div><div class="flex items-center space-x-2"><span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span><span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span></div></div>`).join('');
+        document.getElementById('stats-breakdown').innerHTML = breakdownArr.map(item => `<div onclick="window.filterByCategory('${item.id}')" class="flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${currentCategoryFilter === item.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'}"><div class="flex items-center"><div class="w-3 h-3 rounded-full mr-2 shrink-0" style="background-color: ${item.color}"></div><div class="flex flex-col"><span class="text-xs ${currentCategoryFilter === item.id ? 'font-bold text-blue-700' : 'text-gray-700'}">${item.name}</span>${item.extraInfo || ''}</div></div><div class="flex items-center space-x-2"><span class="text-xs font-medium text-gray-900">$${item.amount.toLocaleString()}</span><span class="text-[10px] text-gray-400 w-8 text-right">${item.percent}%</span></div></div>`).join('');
       }
 
-      // 包含移轉及股票交易紀錄
-      let listRecords = filteredRecords.filter(r => r.type === currentStatsType || r.type === 'transfer' || r.type === 'stock_buy' || r.type === 'stock_sell');
-      if (currentCategoryFilter) listRecords = listRecords.filter(r => r.cat === currentCategoryFilter);
+      let listRecords = filteredRecords.filter(r => {
+          if (currentStatsType === 'stock_buy') return r.type === 'stock_buy';
+          if (currentStatsType === 'stock_sell') return r.type === 'stock_sell';
+          return r.type === currentStatsType || r.type === 'transfer';
+      });
+
+      if (currentCategoryFilter) {
+          listRecords = listRecords.filter(r => {
+             if (currentStatsType === 'stock_buy' || currentStatsType === 'stock_sell') return r.stockId === currentCategoryFilter;
+             return r.cat === currentCategoryFilter;
+          });
+      }
 
       const listTitle = document.getElementById('history-list-title');
       if (currentSearchQuery || currentCategoryFilter) {
-          let catName = currentCategoryFilter ? categories.find(c => c.id === currentCategoryFilter)?.name : '';
-          listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${catName||''}</span>`;
+          let filterName = currentCategoryFilter;
+          if (currentStatsType !== 'stock_buy' && currentStatsType !== 'stock_sell') {
+              filterName = currentCategoryFilter ? (categories.find(c => c.id === currentCategoryFilter)?.name || '') : '';
+          }
+          listTitle.innerHTML = `篩選結果 <span class="text-blue-500 font-normal text-xs ml-1">${currentSearchQuery ? `關鍵字: "${currentSearchQuery}" ` : ''}${filterName||''}</span>`;
       } else { listTitle.innerHTML = '區間紀錄 <span class="text-[10px] text-gray-400 font-normal ml-1">(點擊直接修改)</span>'; }
 
       const historyContainer = document.getElementById('history-list');
@@ -1229,7 +1297,16 @@
               const bankA = assets.find(x => x.id === r.bankAssetId)?.name || '?'; const stockA = assets.find(x => x.id === r.stockAssetId)?.name || '?';
               accountBadge = `<span class="bg-gray-200 px-1 rounded text-[8px] mr-1">${stockA} ➔ ${bankA}</span>`;
               catIconHtml = `<div class="p-3 rounded-full flex items-center justify-center bg-orange-100 text-orange-500"><i class="fas fa-chart-line text-sm"></i></div>`;
-              catSelectHtml = `<span class="font-bold text-gray-800">賣出 ${r.stockId} <span class="text-xs text-gray-500 font-normal">(${r.shares}股)</span></span>`;
+              
+              let plText = '';
+              if (r.cost_deducted !== undefined) {
+                  let rowPl = r.amount - r.cost_deducted;
+                  let plColor = rowPl > 0 ? 'text-red-500' : (rowPl < 0 ? 'text-green-500' : 'text-gray-500');
+                  let plSign = rowPl > 0 ? '+' : '';
+                  plText = `<span class="ml-1 text-[10px] ${plColor} font-bold px-1.5 py-0.5 rounded bg-gray-100">損益 ${plSign}$${Math.round(rowPl).toLocaleString()}</span>`;
+              }
+
+              catSelectHtml = `<span class="font-bold text-gray-800 flex items-center flex-wrap">賣出 ${r.stockId} <span class="text-xs text-gray-500 font-normal mx-1">(${r.shares}股)</span> ${plText}</span>`;
               isAmountReadonly = true;
            } else {
               const cat = categories.find(c => c.id === r.cat) || { id: 'unknown', name: '未知', color: '#9CA3AF', icon: 'fas fa-question', type: currentStatsType };
